@@ -1,0 +1,11 @@
+{
+  "name": "lansend",
+  "dependencies": [
+    "boost-asio",
+    "boost-beast",
+    "boost-system",
+    "nlohmann-json",
+    "openssl",
+    "spdlog"
+  ]
+}

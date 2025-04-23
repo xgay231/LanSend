@@ -1,0 +1,127 @@
+{
+    "version": 8,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build",
+            "installDir": "${sourceDir}/build/install/${presetName}",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        {
+            "name": "native",
+            "inherits": "base",
+            "displayName": "Native"
+        },
+        {
+            "name": "msvc",
+            "inherits": "base",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "msvc-x64",
+            "inherits": "msvc",
+            "displayName": "MSVC x64",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            }
+        },
+        {
+            "name": "msvc-x86",
+            "inherits": "msvc",
+            "displayName": "MSVC x86",
+            "architecture": {
+                "value": "x86",
+                "strategy": "external"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "native",
+            "configurePreset": "native",
+            "displayName": "Ninja Multi-Config"
+        },
+        {
+            "name": "native-debug",
+            "inherits": "native",
+            "displayName": "Native Debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "native-release",
+            "inherits": "native",
+            "displayName": "Native Release",
+            "configuration": "Release"
+        },
+        {
+            "name": "native-relwithdebinfo",
+            "inherits": "native",
+            "displayName": "Native RelWithDebInfo",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "msvc-x64",
+            "configurePreset": "msvc-x64",
+            "displayName": "MSVC x64"
+        },
+        {
+            "name": "msvc-x64-debug",
+            "inherits": "msvc-x64",
+            "displayName": "MSVC x64 Debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc-x64-release",
+            "inherits": "msvc-x64",
+            "displayName": "MSVC x64 Release",
+            "configuration": "Release"
+        },
+        {
+            "name": "msvc-x64-relwithdebinfo",
+            "inherits": "msvc-x64",
+            "displayName": "MSVC x64 RelWithDebInfo",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "msvc-x86",
+            "configurePreset": "msvc-x86",
+            "displayName": "MSVC x86"
+        },
+        {
+            "name": "msvc-x86-debug",
+            "inherits": "msvc-x86",
+            "displayName": "MSVC x86 Debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc-x86-release",
+            "inherits": "msvc-x86",
+            "displayName": "MSVC x86 Release",
+            "configuration": "Release"
+        },
+        {
+            "name": "msvc-x86-relwithdebinfo",
+            "inherits": "msvc-x86",
+            "displayName": "MSVC x86 RelWithDebInfo",
+            "configuration": "RelWithDebInfo"
+        }
+    ],
+    "testPresets": []
+}

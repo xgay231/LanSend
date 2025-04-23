@@ -30,3 +30,18 @@
 *.exe
 *.out
 *.app
+
+# clangd cache
+.cache
+
+# CMake user presets
+CMakeUserPresets.json
+
+# CMake build directory
+/build
+/out
+
+# IDE settings
+.vscode/settings.json
+.idea
+.vs
