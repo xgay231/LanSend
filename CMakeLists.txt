@@ -4,9 +4,10 @@ project(lansend LANGUAGES CXX)
 file(GLOB_RECURSE CXX_SOURCE
     src/*.cpp
     src/*.h
+    src/*.hpp
 )
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -22,6 +23,10 @@ find_package(OpenSSL 3.3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 add_executable(lansend ${CXX_SOURCE})
+
+if(WIN32)
+  target_compile_definitions(lansend PRIVATE _WIN32_WINNT=0x0A00)
+endif()
 
 target_include_directories(lansend
     PRIVATE
