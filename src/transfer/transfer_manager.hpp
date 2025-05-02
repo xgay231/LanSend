@@ -3,6 +3,7 @@
 #include "../discovery/discovery_manager.hpp"
 #include "../util/config.hpp"
 #include "../util/logger.hpp"
+#include "transfer_metadata.hpp"
 #include <atomic>
 #include <boost/asio.hpp>
 #include <chrono>
@@ -52,6 +53,7 @@ public:
     // 状态查询
     std::optional<TransferState> get_transfer_state(uint64_t transfer_id) const;
     std::vector<TransferState> get_active_transfers() const;
+    std::optional<lansend::TransferMetadata> get_transfer_metadata(uint64_t transfer_id) const;
 
 private:
     boost::asio::io_context& io_context_;
