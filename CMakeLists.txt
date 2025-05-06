@@ -18,7 +18,8 @@ endif()
 
 # find vcpkg-installed
 find_package(spdlog REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system url filesystem)
+find_package(Boost REQUIRED COMPONENTS system url filesystem asio beast)
+find_package(tomlplusplus CONFIG REQUIRED)
 find_package(OpenSSL 3.3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
@@ -40,7 +41,10 @@ target_link_libraries(lansend
         Boost::system
         Boost::filesystem
         Boost::url
+        Boost::asio
+        Boost::beast
         OpenSSL::Crypto
         OpenSSL::SSL
         nlohmann_json::nlohmann_json
+        tomlplusplus::tomlplusplus
 )
