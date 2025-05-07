@@ -55,7 +55,6 @@ public:
 
 private:
     boost::asio::io_context& io_context_;
-    Logger& logger_;
 
     std::unique_ptr<lansend::api::HttpServer> server_;
     std::unique_ptr<DiscoveryManager> discovery_manager_;

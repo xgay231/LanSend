@@ -57,7 +57,6 @@ public:
 
 private:
     boost::asio::io_context& io_context_;
-    Logger& logger_;
 
     std::map<uint64_t, TransferState> active_transfers_;
     std::atomic<uint64_t> next_transfer_id_{1};

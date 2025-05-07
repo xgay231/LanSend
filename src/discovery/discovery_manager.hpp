@@ -38,7 +38,6 @@ public:
 
 private:
     boost::asio::io_context& io_context_;
-    Logger& logger_;
 
     std::map<std::string, DeviceInfo> discovered_devices_;
     std::function<void(const DeviceInfo&)> device_found_callback_;

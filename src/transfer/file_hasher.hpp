@@ -21,8 +21,6 @@ public:
     std::string finalize_chunked_sha256();
 
 private:
-    Logger& logger_;
-
     // OpenSSL相关
     struct OpenSSLContext;
     std::unique_ptr<OpenSSLContext> openssl_context_;

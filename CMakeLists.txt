@@ -30,6 +30,13 @@ if(WIN32)
   target_compile_definitions(lansend PRIVATE _WIN32_WINNT=0x0A00)
 endif()
 
+# definitions for Logger
+target_compile_definitions(lansend
+  PRIVATE
+    $<$<CONFIG:Debug>:LANSEND_DEBUG>
+    $<$<CONFIG:Release>:LANSEND_RELEASE>
+)
+
 target_include_directories(lansend
     PRIVATE
       ${CMAKE_SOURCE_DIR}/src
