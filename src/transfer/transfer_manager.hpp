@@ -57,7 +57,6 @@ public:
 
 private:
     boost::asio::io_context& io_context_;
-    Config& config_;
     Logger& logger_;
 
     std::map<uint64_t, TransferState> active_transfers_;

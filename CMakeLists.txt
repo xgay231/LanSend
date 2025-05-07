@@ -21,6 +21,8 @@ find_package(spdlog REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system url filesystem)
 find_package(OpenSSL 3.3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(tomlplusplus REQUIRED IMPORTED_TARGET tomlplusplus)
 
 add_executable(lansend ${CXX_SOURCE})
 

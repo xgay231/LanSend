@@ -21,7 +21,6 @@ public:
     std::string finalize_chunked_sha256();
 
 private:
-    Config& config_;
     Logger& logger_;
 
     // OpenSSL相关

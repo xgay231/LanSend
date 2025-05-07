@@ -27,7 +27,6 @@ public:
     boost::asio::ssl::context& get_ssl_context();
 
 private:
-    Config& config_;
     Logger& logger_;
 
     std::unique_ptr<boost::asio::ssl::context> ssl_context_;
