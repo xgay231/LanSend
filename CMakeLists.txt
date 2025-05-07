@@ -19,7 +19,6 @@ endif()
 # find vcpkg-installed
 find_package(spdlog REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system url filesystem asio beast)
-find_package(tomlplusplus CONFIG REQUIRED)
 find_package(OpenSSL 3.3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -43,6 +42,10 @@ target_include_directories(lansend
       ${CMAKE_SOURCE_DIR}/src
 )
 
+if (MSVC)
+  target_compile_options(lansend PRIVATE /bigobj)
+endif()
+
 target_link_libraries(lansend
     PRIVATE
         spdlog::spdlog_header_only
@@ -55,5 +58,4 @@ target_link_libraries(lansend
         OpenSSL::Crypto
         OpenSSL::SSL
         nlohmann_json::nlohmann_json
-        tomlplusplus::tomlplusplus
 )
