@@ -40,7 +40,8 @@ HttpServer::~HttpServer() {
 
 void HttpServer::add_route(const std::string& path, http::verb method, RouteHandler handler) {
     routes_[path] = {method, std::move(handler)};
-    Logger::get_instance().info(std::format("Added route: {} {}", http::to_string(method), path));
+    Logger::get_instance().info(
+        std::format("Added route: {} {}", std::string(http::to_string(method)), path));
 }
 
 void HttpServer::start(uint16_t port) {
@@ -86,8 +87,9 @@ boost::asio::awaitable<void> HttpServer::accept_connections() {
     while (running_) {
         try {
             tcp::socket socket = co_await acceptor_.async_accept(net::use_awaitable);
-            Logger::get_instance().info(std::format("Accepted connection from: {}",
-                                                    socket.remote_endpoint().address().to_string()));
+            Logger::get_instance().info(
+                std::format("Accepted connection from: {}",
+                            std::string(socket.remote_endpoint().address().to_string())));
 
             ssl::stream<tcp::socket> stream(std::move(socket), ssl_context_);
 
@@ -149,8 +151,9 @@ boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<tcp::sock
 
             timer.cancel();
 
-            Logger::get_instance().info(
-                std::format("Received request: {} {}", http::to_string(req.method()), req.target()));
+            Logger::get_instance().info(std::format("Received request: {} {}",
+                                                    std::string(http::to_string(req.method())),
+                                                    std::string(req.target())));
 
             AnyResponse res = co_await handle_request(std::move(req));
 
@@ -232,12 +235,12 @@ boost::asio::awaitable<AnyResponse> HttpServer::handle_request(HttpRequest&& req
         Logger::get_instance().warn(
             std::format("Method not allowed for route {}: requested {}, expected {}",
                         path,
-                        http::to_string(req.method()),
-                        http::to_string(route_info.method)));
+                        std::string(http::to_string(req.method())),
+                        std::string(http::to_string(route_info.method))));
         http::response<http::string_body> error_res{http::status::method_not_allowed, req.version()};
         error_res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
         error_res.set(http::field::content_type, "application/json");
-        error_res.set(http::field::allow, http::to_string(route_info.method));
+        error_res.set(http::field::allow, std::string(http::to_string(route_info.method)));
         error_res.keep_alive(req.keep_alive());
         error_res.body() = R"({\"error\": \"Method Not Allowed\"})";
         error_res.prepare_payload();
