@@ -1,0 +1,190 @@
+- 后端核心 (C++ REST API Server): 保持一个稳定、可测试的 C++ 后端，通过 HTTPS REST API 提供服务。可以通过命令行工具或 Electron GUI 进行交互。
+- GUI (暂定Electron): 使用 Electron 构建跨平台桌面应用，作为后端 REST API 的客户端，负责用户交互和状态展示。
+- 模块化: 将功能划分为独立的类/模块，降低耦合度。
+- 异步: 用协程 (boost::asio::awaitable, co_await, co_spawn) 处理网络 I/O 和并发，替代回调函数，提高代码可读性。
+- 错误处理：基于C++23的expected。
+
+
+---
+阶段一：核心网络与基础 API (C++ 后端)
+
+- 目标: 搭建开发环境，实现基于 HTTPS 的 REST API 服务器骨架（使用协程处理请求），处理设备信息查询和基础文件传输请求。实现证书生成和管理。实现命令行界面。
+- 关键类/模块设计:
+  - NetworkManager (src/core/network_manager.hpp)
+    - 职责：管理所有网络相关组件，协调设备发现和文件传输，提供事件通知接口
+    - 成员：boost::asio::io_context& io_context_, CertificateManager& cert_manager_, HttpServer& http_server_, DiscoveryManager& discovery_manager_, TransferManager& transfer_manager_
+    - void start(uint16_t port): 启动网络服务
+    - void stop(): 停止网络服务
+    - void start_discovery(): 启动设备发现
+    - void stop_discovery(): 停止设备发现
+    - std::vector<DeviceInfo> get_discovered_devices() const: 获取发现的设备列表
+    - boost::asio::awaitable<TransferResult> send_file(const DeviceInfo& target, const std::filesystem::path& filepath): 发送文件
+    - void set_device_found_callback(...): 设置设备发现回调
+    - void set_transfer_progress_callback(...): 设置传输进度回调
+    - void set_transfer_complete_callback(...): 设置传输完成回调
+  - CertificateManager (src/security/certificate_manager.hpp)
+    - 职责：管理 TLS 证书，处理证书生成和加载，提供证书指纹
+    - 成员：boost::asio::ssl::context ssl_context_
+    - bool generate_self_signed_certificate(...): 生成自签名证书
+    - bool load_certificate(...): 加载证书
+    - std::string get_certificate_fingerprint() const: 获取证书指纹
+    - boost::asio::ssl::context& get_ssl_context(): 获取 SSL 上下文
+  - HttpServer (src/api/http_server.hpp)
+    - 职责：管理 HTTP 服务器，处理路由，管理 SSL 连接
+    - 成员：boost::asio::io_context& io_context_, boost::asio::ssl::context& ssl_context_, std::map<std::string, RouteHandler> routes_
+    - void add_route(const std::string& path, http::verb method, RouteHandler handler): 添加路由
+    - void start(uint16_t port): 启动服务器
+    - void stop(): 停止服务器
+    - boost::asio::awaitable<void> handle_connection(boost::asio::ssl::stream<boost::asio::ip::tcp::socket> stream): 处理连接
+  - RestApiHandler (src/api/rest_api_handler.hpp)
+    - 职责：处理 HTTP 请求，实现 REST API 端点，提供事件流接口
+    - 成员：NetworkManager& network_manager_, TransferManager& transfer_manager_
+    - boost::asio::awaitable<HttpResponse> handle_info_request(...): 处理设备信息请求
+    - boost::asio::awaitable<HttpResponse> handle_send_request(...): 处理发送请求
+    - boost::asio::awaitable<HttpResponse> handle_accept_request(...): 处理接受请求
+    - boost::asio::awaitable<HttpResponse> handle_reject_request(...): 处理拒绝请求
+    - boost::asio::awaitable<HttpResponse> handle_finish_transfer(...): 处理传输完成
+    - boost::asio::awaitable<HttpResponse> handle_cancel_transfer(...): 处理取消传输
+    - boost::asio::awaitable<HttpResponse> handle_get_transfer_status(...): 处理获取传输状态请求
+    - boost::asio::awaitable<HttpResponse> handle_upload_chunk(...): 处理上传文件块请求
+    - boost::asio::awaitable<HttpResponse> handle_download_chunk(...): 处理下载文件块请求
+    - boost::asio::awaitable<HttpResponse> handle_events_stream(...): 处理事件流
+  - Config (src/util/config/config.hpp)
+    - 职责：管理应用配置，提供配置访问接口
+    - 成员：uint16_t https_port_, std::filesystem::path download_dir_, std::string cert_path_, std::string key_path_, uint16_t discovery_port_, std::string device_name_
+    - bool load(int argc, char* argv[]): 加载配置
+    - bool load_from_file(const std::filesystem::path& path): 从文件加载配置
+    - uint16_t get_https_port() const: 获取 HTTPS 端口
+    - std::filesystem::path get_download_dir() const: 获取下载目录
+    - std::string get_cert_path() const: 获取证书路径
+    - std::string get_key_path() const: 获取密钥路径
+    - uint16_t get_discovery_port() const: 获取发现端口
+    - std::string get_device_name() const: 获取设备名称
+  - Logger (src/util/logger/logger.hpp)
+    - 职责：管理日志记录，提供多级别日志支持，支持日志转发
+    - 成员：spdlog::logger logger_
+    - static void init(spdlog::level::level_enum level = spdlog::level::info): 初始化日志器
+    - static void info(const std::string& msg): 记录信息日志
+    - static void warn(const std::string& msg): 记录警告日志
+    - static void error(const std::string& msg): 记录错误日志
+    - template<typename... Args> static void info(fmt::format_string<Args...> fmt, Args&&... args): 格式化日志
+  - CliManager (src/cli/cli_manager.hpp)
+    - 职责：提供命令行界面，处理用户输入，显示命令输出和进度
+    - 成员：NetworkManager& network_manager_, Terminal& terminal_, ProgressDisplay& progress_display_
+    - void process_command(const std::string& command): 处理命令
+    - void start_interactive_mode(): 启动交互模式
+    - void handle_list_devices(): 处理列出设备命令
+    - void handle_send_file(const std::string& device_id, const std::string& filepath): 处理发送文件命令
+    - void handle_show_transfers(): 处理显示传输命令
+    - void handle_cancel_transfer(uint64_t transfer_id): 处理取消传输命令
+    - void handle_show_help(): 处理显示帮助命令
+  - ArgumentParser (src/cli/argument_parser.hpp)
+    - 职责：解析命令行参数
+    - 成员：std::vector<std::string> args_
+    - CliOptions parse(): 解析参数
+    - void show_help(): 显示帮助信息
+  - Terminal (src/cli/terminal.hpp)
+    - 职责：提供终端控制功能
+    - 成员：无
+    - void clear_screen(): 清屏
+    - void set_cursor_position(int x, int y): 设置光标位置
+    - std::string read_line(): 读取一行
+    - bool is_key_pressed(): 检查按键
+  - ProgressDisplay (src/cli/progress_display.hpp)
+    - 职责：显示传输进度
+    - 成员：无
+    - void update_progress(const TransferProgress& progress): 更新进度
+    - void clear_progress(): 清除进度
+- 任务分解:
+  - P1: CLI 组件实现（CliManager, ArgumentParser, Terminal, ProgressDisplay）
+  - P2: CertificateManager 实现与测试
+  - P3: HttpServer 基础实现（使用协程处理连接和请求）
+  - P4: RestApiHandler 实现 /api/info 端点
+  - P5: NetworkManager 实现，集成 Server/CertManager
+  - All: 单元测试
+
+
+
+---
+阶段二：设备发现与文件传输 (C++ 后端)
+
+- 目标: 实现基于 UDP 的设备发现机制，完善文件传输协议
+- 关键类/模块设计:
+  - DiscoveryManager (src/discovery/discovery_manager.hpp)
+    - 职责：管理设备发现，处理设备状态更新，提供设备信息查询
+    - 成员：boost::asio::io_context& io_context_, boost::asio::ip::udp::socket socket_, std::vector<DeviceInfo> devices_
+    - void start(uint16_t port): 启动发现服务
+    - void stop(): 停止发现服务
+    - void add_device(const DeviceInfo& device): 添加设备
+    - void remove_device(const std::string& device_id): 移除设备
+    - std::vector<DeviceInfo> get_devices() const: 获取设备列表
+    - void set_device_found_callback(...): 设置设备发现回调
+    - void set_device_lost_callback(...): 设置设备丢失回调
+  - TransferManager (src/transfer/transfer_manager.hpp)
+    - 职责：管理文件传输状态，处理传输进度，提供传输控制接口
+    - 成员：std::map<uint64_t, TransferState> transfers_, std::atomic<uint64_t> next_transfer_id_
+    - boost::asio::awaitable<TransferResult> start_transfer(...): 开始传输
+    - void cancel_transfer(uint64_t transfer_id): 取消传输
+    - std::optional<TransferState> get_transfer_state(...): 获取传输状态
+    - std::vector<TransferState> get_active_transfers() const: 获取活动传输
+  - FileHasher (src/transfer/file_hasher.hpp)
+    - 职责：计算文件哈希，支持分块哈希计算
+    - 成员：EVP_MD_CTX* context_, const EVP_MD* md_type_
+    - std::string calculate_sha256_sync(...): 同步计算 SHA256
+    - bool start_chunked_sha256(): 开始分块哈希
+    - bool update_chunk(...): 更新分块
+    - std::string finalize_chunked_sha256(): 完成分块哈希
+  - TransferMetadata (src/transfer/transfer_metadata.hpp)
+    - 职责：管理单个传输的元数据（文件信息、分块列表、完成状态），提供 TOML 持久化加载/保存
+    - 成员：transfer_id_, filename_, file_size_, file_hash_, chunk_size_, completed_size_, chunks_ (std::vector<ChunkInfo>)
+    - bool create(...): 创建新元数据
+    - bool load(uint64_t transfer_id): 加载元数据
+    - bool save() const: 保存元数据
+    - bool update_chunk_status(...): 更新块状态
+    - std::optional<ChunkInfo> get_next_incomplete_chunk() const: 获取下一个未完成块
+- 任务分解:
+  - P1: DiscoveryManager 实现（使用协程进行广播/监听）
+  - P2: FileHasher 实现与测试
+  - P3: TransferManager 实现
+  - P4: RestApiHandler 实现文件传输相关端点
+  - P5: NetworkManager 集成 DiscoveryManager 和 TransferManager
+  - All: 单元测试
+
+
+
+---
+阶段三：Electron GUI 集成
+
+- 目标: 实现 Electron GUI，与 C++ 后端集成
+- 关键组件:
+  - Electron 主进程 (main.js)
+    - 职责：创建浏览器窗口，管理应用生命周期，与 C++ 后端通信
+    - 启动和管理 C++ 后端进程
+    - 使用 Node.js 的 https 或 axios 向 C++ 后端发送请求
+    - 处理来自渲染进程的 IPC 请求
+    - 监听后端事件并转发给渲染进程
+  - Electron 渲染进程 (renderer.js, index.html, style.css)
+    - 职责：构建用户界面
+    - 使用 ipcRenderer 与主进程通信
+    - 监听主进程事件并更新 UI
+    - 实现设备发现和文件传输的 UI
+  - C++ 后端
+    - 提供 REST API 端点
+    - 提供事件流接口
+    - 处理文件传输
+- 任务分解:
+  - P1: Electron 项目初始化
+  - P2: 主进程实现
+  - P3: 渲染进程实现
+  - P4: 与 C++ 后端集成
+  - P5: 测试和优化
+  - All: 端到端测试
+
+
+
+---
+时间线与里程碑
+- Week 1 结束: C++ 后端核心功能和 CLI 实现
+- Week 2 结束: 设备发现和文件传输功能实现
+- Week 3 结束: Electron GUI 实现
+- Week 3+: 完整功能测试，打包和文档编写
