@@ -51,8 +51,6 @@ public:
 private:
     NetworkManager& network_manager_;
     TransferManager& transfer_manager_;
-    Config& config_;
-    Logger& logger_;
 
     // 辅助函数
     std::string get_device_id() const;

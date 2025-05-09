@@ -4,8 +4,8 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
 #include <toml++/toml.hpp>
+#include <vector>
 
 namespace lansend {
 
@@ -17,21 +17,25 @@ struct ChunkInfo {
 };
 
 class TransferMetadata {
-   public:
+public:
     // Constructor (consider parameters needed for creation/loading)
-    TransferMetadata(uint64_t transfer_id, const std::string& filename,
-                     uint64_t file_size, const std::string& file_hash,
+    TransferMetadata(uint64_t transfer_id,
+                     const std::string& filename,
+                     uint64_t file_size,
+                     const std::string& file_hash,
                      uint64_t chunk_size);
 
     // Factory method or similar to create new metadata and potentially save it initially
-    static std::optional<TransferMetadata> create(
-        const std::filesystem::path& metadata_dir, uint64_t transfer_id,
-        const std::string& filename, uint64_t file_size,
-        const std::string& file_hash, uint64_t chunk_size);
+    static std::optional<TransferMetadata> create(const std::filesystem::path& metadata_dir,
+                                                  uint64_t transfer_id,
+                                                  const std::string& filename,
+                                                  uint64_t file_size,
+                                                  const std::string& file_hash,
+                                                  uint64_t chunk_size);
 
     // Load metadata from persistent storage (e.g., TOML file)
-    static std::optional<TransferMetadata> load(
-        const std::filesystem::path& metadata_dir, uint64_t transfer_id);
+    static std::optional<TransferMetadata> load(const std::filesystem::path& metadata_dir,
+                                                uint64_t transfer_id);
 
     // Save metadata to persistent storage
     bool save(const std::filesystem::path& metadata_dir) const;
@@ -52,12 +56,12 @@ class TransferMetadata {
     const std::vector<ChunkInfo>& get_chunks() const;
     uint64_t get_total_chunks() const; // Needs calculation
 
-   private:
+private:
     // Calculate total chunks based on file size and chunk size
     void calculate_initial_chunks();
     // Helper to get the path to the metadata file
-    static std::filesystem::path get_metadata_filepath(
-        const std::filesystem::path& metadata_dir, uint64_t transfer_id);
+    static std::filesystem::path get_metadata_filepath(const std::filesystem::path& metadata_dir,
+                                                       uint64_t transfer_id);
 
     uint64_t transfer_id_;
     std::string filename_;
@@ -69,4 +73,4 @@ class TransferMetadata {
     // Add other necessary members, e.g., transfer status (pending, active, completed, failed)
 };
 
-}  // namespace lansend
+} // namespace lansend

@@ -6,6 +6,16 @@
 #include <memory>
 
 int main(int argc, char* argv[]) {
-    std::cout << "Hello, World!" << std::endl;
+    lansend::Logger logger(
+#ifdef LANSEND_DEBUG
+        lansend::Logger::Level::debug,
+#else
+        lansend::Logger::Level::info,
+#endif
+        (std::filesystem::temp_directory_path() / "CodeSoul" / "LanSend" / "logs" / "evento.log")
+            .string());
+    lansend::initConfig();
+    spdlog::info("Hello, welcome to LanSend!");
+    lansend::saveConfig();
     return 0;
 }

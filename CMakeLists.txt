@@ -18,9 +18,11 @@ endif()
 
 # find vcpkg-installed
 find_package(spdlog REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system url filesystem)
+find_package(Boost REQUIRED COMPONENTS system url filesystem asio beast)
 find_package(OpenSSL 3.3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(tomlplusplus REQUIRED IMPORTED_TARGET tomlplusplus)
 
 add_executable(lansend ${CXX_SOURCE})
 
@@ -28,10 +30,21 @@ if(WIN32)
   target_compile_definitions(lansend PRIVATE _WIN32_WINNT=0x0A00)
 endif()
 
+# definitions for Logger
+target_compile_definitions(lansend
+  PRIVATE
+    $<$<CONFIG:Debug>:LANSEND_DEBUG>
+    $<$<CONFIG:Release>:LANSEND_RELEASE>
+)
+
 target_include_directories(lansend
     PRIVATE
       ${CMAKE_SOURCE_DIR}/src
 )
+
+if (MSVC)
+  target_compile_options(lansend PRIVATE /bigobj)
+endif()
 
 target_link_libraries(lansend
     PRIVATE
@@ -40,6 +53,8 @@ target_link_libraries(lansend
         Boost::system
         Boost::filesystem
         Boost::url
+        Boost::asio
+        Boost::beast
         OpenSSL::Crypto
         OpenSSL::SSL
         nlohmann_json::nlohmann_json

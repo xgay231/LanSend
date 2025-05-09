@@ -32,7 +32,7 @@ public:
 
 private:
     NetworkManager& network_manager_;
-    Logger& logger_;
+
     std::unique_ptr<Terminal> terminal_;
     std::unique_ptr<ProgressDisplay> progress_display_;
 

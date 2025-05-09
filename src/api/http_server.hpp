@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <functional>
 #include <map>
-#include <memory>
 #include <string>
 
 namespace lansend {
@@ -15,9 +14,12 @@ namespace api {
 namespace http = boost::beast::http;
 using HttpRequest = http::request<http::string_body>;
 using HttpResponse = http::response<http::string_body>;
+using HttpChunkResponse = http::response<http::vector_body<char>>;
+using AnyResponse = std::variant<HttpResponse, HttpChunkResponse>;
 
 // 路由处理器函数类型
-using RouteHandler = std::function<boost::asio::awaitable<HttpResponse>(HttpRequest&&)>;
+// using RouteHandler = std::function<boost::asio::awaitable<HttpResponse>(HttpRequest&&)>;
+using RouteHandler = std::function<boost::asio::awaitable<AnyResponse>(HttpRequest&&)>;
 
 // 路由信息结构体
 struct RouteInfo {
@@ -25,11 +27,7 @@ struct RouteInfo {
     RouteHandler handler;
 };
 
-/**
- * @brief HTTPS 服务器类
- * 
- * 管理 HTTPS 服务器，处理路由，管理 SSL 连接
- */
+//HTTPS 服务器类
 class HttpServer {
 public:
     // 构造函数
@@ -56,7 +54,7 @@ private:
         boost::asio::ssl::stream<boost::asio::ip::tcp::socket> stream);
 
     // 处理请求
-    boost::asio::awaitable<HttpResponse> handle_request(HttpRequest&& request);
+    boost::asio::awaitable<AnyResponse> handle_request(HttpRequest&& request);
 
 private:
     boost::asio::io_context& io_context_;
