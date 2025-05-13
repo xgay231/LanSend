@@ -55,8 +55,8 @@ public:
     void set_transfer_complete_callback(std::function<void(const TransferResult&)> callback);
 
 
-    //TransferManager get_transfer_manager()；
-    //std::vector<TransferManager::TransferState>& get_active_transfers()；
+    std::vector<TransferState> get_active_transfers() const;
+    TransferManager& get_transfer_manager()
 
 private:
     boost::asio::io_context& io_context_;

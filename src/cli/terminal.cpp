@@ -3,10 +3,11 @@
 
 #include <string>
 #include <cstdlib>   // 用于 system 函数
-#include <windows.h> // 用于 Windows 系统
+
 
 #ifdef _WIN32
 #include <conio.h> // 用于 Windows 的 _kbhit
+#include <windows.h> // 用于 Windows 系统
 #endif
 
 #ifdef _WIN32
