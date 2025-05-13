@@ -1,4 +1,3 @@
-set(CMAKE_TOOLCHAIN_FILE "C:/Users/maker/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 cmake_minimum_required(VERSION 3.21.0)
 project(lansend LANGUAGES CXX)
 
