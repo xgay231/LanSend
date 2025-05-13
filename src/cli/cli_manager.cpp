@@ -14,9 +14,9 @@ CliManager::CliManager(NetworkManager& network_manager)
       network_manager_(network_manager) {
     // 注册事件回调
     network_manager_.set_device_found_callback(
-        [this](const DeviceInfo& device) { this->on_device_found(device); });
+        [this](const lansend::models::DeviceInfo& device) { this->on_device_found(device); });
     network_manager_.set_transfer_progress_callback(
-        [this](const TransferProgress& progress) {
+        [this](const lansend::models::TransferProgress& progress) {
             this->on_transfer_progress(progress);
         });
     network_manager_.set_transfer_complete_callback(
@@ -60,7 +60,7 @@ void CliManager::handle_send_file(const std::string& device_id, const std::strin
     }
     try {
         auto devices = network_manager_.get_discovered_devices();
-        std::optional<DiscoveryManager::DeviceInfo> device_info;
+        std::optional<lansend::models::DeviceInfo> device_info;
         for (const auto& device : devices) {
             if(device.id == device_id) {
                 device_info = device;
