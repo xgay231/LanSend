@@ -10,6 +10,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include "../models/device_info.hpp"
 #include "../models/transfer_progress.hpp"
+#include <boost/asio/udp.hpp>
 
 using namespace boost::asio;
 
@@ -19,11 +20,11 @@ DiscoveryManager::DiscoveryManager(io_context& ioc)
       listen_socket_(ioc),
       broadcast_timer_(ioc),
       device_found_callback_([](const lansend::models::DeviceInfo& device) {
-          std::cout << "Device found: " << device.id << std::endl;
+          std::cout << "Device found: " << device.device_id << std::endl;
       }),
       device_lost_callback_([](const std::string& device_id) {
           std::cout << "Device lost: " << device_id << std::endl;
-      });
+      }){}
 
 DiscoveryManager::~DiscoveryManager() {
     stop();
@@ -64,11 +65,11 @@ void DiscoveryManager::stop() {
     }
 }
 
-void DiscoveryManager::add_device(const DeviceInfo& device) {
+void DiscoveryManager::add_device(const lansend::models::DeviceInfo& device) {
     std::lock_guard<std::mutex> lock(devices_mutex_);
-    auto it = discovered_devices_.find(device.id);
+    auto it = discovered_devices_.find(device.device_id);
     if (it == discovered_devices_.end()) {
-        discovered_devices_[device.id] = device;
+        discovered_devices_[device.device_id] = device;
         if (device_found_callback_) {
             device_found_callback_(device);
         }

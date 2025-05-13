@@ -21,7 +21,7 @@ CliManager::CliManager(NetworkManager& network_manager)
             this->on_transfer_progress(progress);
         });
     network_manager_.set_transfer_complete_callback(
-        [this](const TransferManager::TransferResult& result) { this->on_transfer_complete(result); });
+        [this](const TransferResult& result) { this->on_transfer_complete(result); });
 
     // // 解析命令行参数
     // auto options = argument_parser_->parse();
@@ -153,7 +153,7 @@ void CliManager::print_device_list(const std::vector<lansend::models::DeviceInfo
     }
 }
 
-void CliManager::print_transfer_list(const std::vector<TransferManager::TransferState>& transfers) {
+void CliManager::print_transfer_list(const std::vector<TransferState>& transfers) {
     terminal_->print_info("transfer list:");
     for (const auto& transfer : transfers) {
         std::ostringstream oss;
@@ -173,9 +173,9 @@ void CliManager::print_help() {
     terminal_->print_info("  clear - Clears the screen");
 }
 
-void CliManager::on_device_found(const DiscoveryManager::DeviceInfo& device) {
+void CliManager::on_device_found(const lansend::models::DeviceInfo& device) {
     std::ostringstream oss;
-    oss << "new device found: " << device.name << " (" << device.ip << ")";
+    oss << "new device found: " << device.alias << " (" << device.ip_address << ")";
     terminal_->print_info(oss.str());
 }
 
@@ -183,7 +183,7 @@ void CliManager::on_transfer_progress(const lansend::models::TransferProgress& p
     progress_display_->update_progress(progress);
 }
 
-void CliManager::on_transfer_complete(const TransferManager::TransferResult& result) {
+void CliManager::on_transfer_complete(const TransferResult& result) {
     if (result.success) {
         terminal_->print_info("Transfer completed: success，transfer ID: " + std::to_string(result.transfer_id));
     } else {
