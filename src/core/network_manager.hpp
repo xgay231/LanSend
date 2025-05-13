@@ -43,6 +43,8 @@ public:
     void start_discovery();
     void stop_discovery();
     std::vector<lansend::models::DeviceInfo> get_discovered_devices() const;
+    std::vector<TransferState> get_active_transfers();
+    TransferManager& get_transfer_manager();
 
     // 文件传输相关
     boost::asio::awaitable<TransferResult> send_file(const lansend::models::DeviceInfo& target,
@@ -53,6 +55,7 @@ public:
     void set_transfer_progress_callback(
         std::function<void(const lansend::models::TransferProgress&)> callback);
     void set_transfer_complete_callback(std::function<void(const TransferResult&)> callback);
+
 
 private:
     boost::asio::io_context& io_context_;
