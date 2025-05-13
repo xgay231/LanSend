@@ -1,4 +1,4 @@
-<<<<<<< Updated upstream
+
 #include "http_server.hpp"
 #include "../util/logger.hpp"
 #include <boost/asio/co_spawn.hpp>

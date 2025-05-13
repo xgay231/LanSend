@@ -1,9 +1,13 @@
 #include "terminal.hpp"
 #include <iostream>
-#include <conio.h> // 用于 Windows 的 _kbhit
+
 #include <string>
 #include <cstdlib>   // 用于 system 函数
 #include <windows.h> // 用于 Windows 系统
+
+#ifdef _WIN32
+#include <conio.h> // 用于 Windows 的 _kbhit
+#endif
 
 #ifdef _WIN32
     // Windows 系统下的实现
