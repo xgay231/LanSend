@@ -1,5 +1,7 @@
 #include "../util/logger.hpp"
 #include <boost/asio/use_awaitable.hpp>
+#include <nlohmann/json.hpp> 
+// #include <boost/asio/udp.hpp>
 #include "discovery_manager.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -10,8 +12,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include "../models/device_info.hpp"
 #include "../models/transfer_progress.hpp"
-#include <boost/asio/udp.hpp>
-
+using json = nlohmann::json; 
 using namespace boost::asio;
 
 DiscoveryManager::DiscoveryManager(io_context& ioc)
@@ -66,20 +67,21 @@ void DiscoveryManager::stop() {
 }
 
 void DiscoveryManager::add_device(const lansend::models::DeviceInfo& device) {
-    std::lock_guard<std::mutex> lock(devices_mutex_);
+    // std::lock_guard<std::mutex> lock(devices_mutex_);
     auto it = discovered_devices_.find(device.device_id);
     if (it == discovered_devices_.end()) {
         discovered_devices_[device.device_id] = device;
         if (device_found_callback_) {
             device_found_callback_(device);
         }
-    } else {
-        it->second.last_seen = std::chrono::system_clock::now();
-    }
+    } 
+    //else {
+    //     it->second.last_seen = std::chrono::system_clock::now();
+    // }
 }
 
 void DiscoveryManager::remove_device(const std::string& device_id) {
-    std::lock_guard<std::mutex> lock(devices_mutex_);
+    // std::lock_guard<std::mutex> lock(devices_mutex_);
     auto it = discovered_devices_.find(device_id);
     if (it != discovered_devices_.end()) {
         discovered_devices_.erase(it);
@@ -89,16 +91,16 @@ void DiscoveryManager::remove_device(const std::string& device_id) {
     }
 }
 
-std::vector<DiscoveryManager::DeviceInfo> DiscoveryManager::get_devices() const {
-    std::lock_guard<std::mutex> lock(devices_mutex_);
-    std::vector<DeviceInfo> devices;
+std::vector<lansend::models::DeviceInfo> DiscoveryManager::get_devices() const {
+    // std::lock_guard<std::mutex> lock(devices_mutex_);
+    std::vector<lansend::models::DeviceInfo> devices;
     for (const auto& pair : discovered_devices_) {
         devices.push_back(pair.second);
     }
     return devices;
 }
 
-void DiscoveryManager::set_device_found_callback(std::function<void(const DeviceInfo&)> callback) {
+void DiscoveryManager::set_device_found_callback(std::function<void(const lansend::models::DeviceInfo&)> callback) {
     device_found_callback_ = callback;
 }
 
@@ -113,22 +115,21 @@ awaitable<void> DiscoveryManager::broadcaster() {
         ip::udp::endpoint broadcast_endpoint(ip::make_address(broadcast_address), broadcast_port);
 
         // 模拟设备信息
-        DeviceInfo self_device;
-        self_device.id = "self_device_id";
-        self_device.name = "Self Device";
-        self_device.ip = "127.0.0.1";
+        lansend::models::DeviceInfo self_device;
+        self_device.device_id = "self_device_id";
+        self_device.alias = "Self Device";
+        self_device.device_model = "win"; // 假设设备类型为 Windows
+        self_device.ip_address = "127.0.0.1";
         self_device.port = 37020;
-        self_device.fingerprint = "device_fingerprint";
-        self_device.last_seen = std::chrono::system_clock::now();
 
-        // 序列化设备信息
-        std::string data = self_device.id + "|" + self_device.name + "|" + self_device.ip + "|" +
-                           std::to_string(self_device.port) + "|" + self_device.fingerprint;
+        // 使用 nlohmann/json 进行序列化
+        json device_json = self_device;
+        std::string data = device_json.dump();
 
         while (broadcast_socket_.is_open()) {
-            co_await async_write_to(broadcast_socket_, buffer(data), broadcast_endpoint, use_awaitable);
+            co_await broadcast_socket_.async_send_to(buffer(data), broadcast_endpoint, use_awaitable);
             co_await broadcast_timer_.async_wait(use_awaitable);
-            broadcast_timer_.expires_after(std::chrono::seconds(5)); // 每5秒广播一次
+            broadcast_timer_.expires_after(std::chrono::seconds(5)); // 每 5 秒广播一次
         }
     } catch (const std::exception& e) {
         std::cerr << "Error in broadcaster: " << e.what() << std::endl;
@@ -147,23 +148,14 @@ awaitable<void> DiscoveryManager::listener() {
 
             std::string data(recv_buffer.data(), bytes_received);
 
-            // 反序列化设备信息
-            size_t pos1 = data.find('|');
-            size_t pos2 = data.find('|', pos1 + 1);
-            size_t pos3 = data.find('|', pos2 + 1);
-            size_t pos4 = data.find('|', pos3 + 1);
-
-            if (pos1 != std::string::npos && pos2 != std::string::npos &&
-                pos3 != std::string::npos && pos4 != std::string::npos) {
-                DeviceInfo device;
-                device.id = data.substr(0, pos1);
-                device.name = data.substr(pos1 + 1, pos2 - pos1 - 1);
-                device.ip = data.substr(pos2 + 1, pos3 - pos2 - 1);
-                device.port = static_cast<uint16_t>(std::stoi(data.substr(pos3 + 1, pos4 - pos3 - 1)));
-                device.fingerprint = data.substr(pos4 + 1);
-                device.last_seen = std::chrono::system_clock::now();
+            try {
+                // 使用 nlohmann/json 进行反序列化
+                json device_json = json::parse(data);
+                lansend::models::DeviceInfo device = device_json.get<lansend::models::DeviceInfo>();
 
                 add_device(device);
+            } catch (const json::parse_error& e) {
+                std::cerr << "Error parsing JSON data: " << e.what() << std::endl;
             }
         }
     } catch (const std::exception& e) {

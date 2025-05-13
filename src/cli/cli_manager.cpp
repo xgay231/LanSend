@@ -157,7 +157,24 @@ void CliManager::print_transfer_list(const std::vector<TransferState>& transfers
     terminal_->print_info("transfer list:");
     for (const auto& transfer : transfers) {
         std::ostringstream oss;
-        oss << "ID: " << transfer.id << " | state: " << transfer.status << std::endl;
+        std::string s;
+        switch (transfer.status) {
+        case TransferStatus::Pending:
+            s="PENDING";
+            break;
+        case TransferStatus::InProgress:
+            s="IN_PROGRESS";
+            break;
+        case TransferStatus::Completed:
+            s="COMPLETED";
+            break;
+        case TransferStatus::Failed:
+            s="FAILED";
+            break;
+        default:
+            s="Cancelled";
+        }
+        oss << "ID: " << transfer.id << " | state: " << s << std::endl;
         terminal_->print_info(oss.str());
     }
 }
