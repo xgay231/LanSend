@@ -14,8 +14,8 @@ int main(int argc, char* argv[]) {
 #endif
         (std::filesystem::temp_directory_path() / "CodeSoul" / "LanSend" / "logs" / "evento.log")
             .string());
-    lansend::initConfig();
+    lansend::init_config();
     spdlog::info("Hello, welcome to LanSend!");
-    lansend::saveConfig();
+    lansend::save_config();
     return 0;
 }
