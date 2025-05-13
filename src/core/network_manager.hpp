@@ -54,6 +54,10 @@ public:
         std::function<void(const lansend::models::TransferProgress&)> callback);
     void set_transfer_complete_callback(std::function<void(const TransferResult&)> callback);
 
+
+    //TransferManager get_transfer_manager()；
+    //std::vector<TransferManager::TransferState>& get_active_transfers()；
+
 private:
     boost::asio::io_context& io_context_;
 

@@ -1,5 +1,5 @@
 {
-    "version": 8,
+    "version": 7,
     "cmakeMinimumRequired": {
         "major": 3,
         "minor": 21,
@@ -12,7 +12,13 @@
             "generator": "Ninja Multi-Config",
             "binaryDir": "${sourceDir}/build",
             "installDir": "${sourceDir}/build/install/${presetName}",
-            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+            "cacheVariables": {
+                "CMAKE_MAKE_PROGRAM": {
+                    "type": "FILEPATH",
+                    "value": "C:/ProgramData/chocolatey/bin/ninja.exe" 
+                }
+            }
         },
         {
             "name": "native",

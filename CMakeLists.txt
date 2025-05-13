@@ -1,12 +1,16 @@
+set(CMAKE_TOOLCHAIN_FILE "C:/Users/maker/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 cmake_minimum_required(VERSION 3.21.0)
 project(lansend LANGUAGES CXX)
 
 option(BUILD_TESTING "Build the tests" ON)
 
 file(GLOB_RECURSE CXX_SOURCE
-    src/*.cpp
-    src/*.h
-    src/*.hpp
+    src/cli/*.cpp
+    src/cli/*.h
+    src/cli/*.hpp
+    # src/*.cpp
+    # src/*.h
+    # src/*.hpp
 )
 
 set(CMAKE_CXX_STANDARD 23)
