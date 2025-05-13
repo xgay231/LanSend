@@ -56,7 +56,7 @@ public:
 
 
     std::vector<TransferState> get_active_transfers() const;
-    TransferManager& get_transfer_manager()
+    TransferManager& get_transfer_manager();
 
 private:
     boost::asio::io_context& io_context_;

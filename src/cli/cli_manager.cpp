@@ -7,6 +7,7 @@
 #include <sstream>
 #include <filesystem>
 #include <stdexcept>
+#include "../transfer/transfer_manager.hpp" 
 
 CliManager::CliManager(NetworkManager& network_manager)
     :terminal_(std::make_unique<Terminal>()),
@@ -62,7 +63,7 @@ void CliManager::handle_send_file(const std::string& device_id, const std::strin
         auto devices = network_manager_.get_discovered_devices();
         std::optional<lansend::models::DeviceInfo> device_info;
         for (const auto& device : devices) {
-            if(device.id == device_id) {
+            if(device.device_id == device_id) {
                 device_info = device;
                 break;
             }
@@ -84,7 +85,7 @@ void CliManager::handle_show_transfers() {
 }
 
 void CliManager::handle_cancel_transfer(uint64_t transfer_id) {
-    network_manager_.get_transfer_manager().cancel_transfer(transfer_id) 
+    network_manager_.get_transfer_manager().cancel_transfer(transfer_id);
     terminal_->print_info("success cancel transfer，transfer ID: " + std::to_string(transfer_id));
 }
 
@@ -143,11 +144,11 @@ void CliManager::execute_command(const std::vector<std::string>& args) {
     }
 }
 
-void CliManager::print_device_list(const std::vector<DiscoveryManager::DeviceInfo>& devices) {
+void CliManager::print_device_list(const std::vector<lansend::models::DeviceInfo>& devices) {
     terminal_->print_info("devices list:");
     for (const auto& device : devices) {
         std::ostringstream oss;
-        oss << "ID: " << device.id << " | 名称: " << device.name << " | IP: " << device.ip;
+        oss << "ID: " << device.device_id << " | 名称: " << device.alias << " | IP: " << device.ip_address;
         terminal_->print_info(oss.str());
     }
 }
@@ -178,7 +179,7 @@ void CliManager::on_device_found(const DiscoveryManager::DeviceInfo& device) {
     terminal_->print_info(oss.str());
 }
 
-void CliManager::on_transfer_progress(const TransferProgress& progress) {
+void CliManager::on_transfer_progress(const lansend::models::TransferProgress& progress) {
     progress_display_->update_progress(progress);
 }
 
