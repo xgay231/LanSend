@@ -14,7 +14,7 @@ ProgressDisplay::~ProgressDisplay() {
 }
 
 // 私有方法，用于打印进度信息
-void ProgressDisplay::print_progress(const TransferProgress& progress) {
+void ProgressDisplay::print_progress(const lansend::models::TransferProgress& progress) {
     // 计算进度百分比
     double percentage = static_cast<double>(progress.bytes_transferred) / progress.total_bytes * 100.0;
     // 转换速度为合适的单位
@@ -58,7 +58,7 @@ void ProgressDisplay::print_progress(const TransferProgress& progress) {
 }
 
 // 更新进度信息
-void ProgressDisplay::update_progress(const TransferProgress& progress) {
+void ProgressDisplay::update_progress(const lansend::models::TransferProgress::TransferProgress& progress) {
     print_progress(progress);
 }
 

@@ -1,6 +1,8 @@
 #include "cli_manager.hpp"
 #include "../discovery/discovery_manager.hpp"
 #include "../transfer/transfer_manager.hpp"
+#include "../models/device_info.hpp"
+#include "../models/transfer_progress.hpp"
 #include <iostream>
 #include <sstream>
 #include <filesystem>
@@ -12,9 +14,9 @@ CliManager::CliManager(NetworkManager& network_manager)
       network_manager_(network_manager) {
     // 注册事件回调
     network_manager_.set_device_found_callback(
-        [this](const DiscoveryManager::DeviceInfo& device) { this->on_device_found(device); });
+        [this](const DeviceInfo& device) { this->on_device_found(device); });
     network_manager_.set_transfer_progress_callback(
-        [this](const TransferManager::TransferProgress& progress) {
+        [this](const TransferProgress& progress) {
             this->on_transfer_progress(progress);
         });
     network_manager_.set_transfer_complete_callback(

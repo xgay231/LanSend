@@ -38,10 +38,6 @@ public:
 
 private:
     NetworkManager& network_manager_;
-<<<<<<< HEAD
-
-=======
->>>>>>> d84a7a6 (cli_manager)
     std::unique_ptr<Terminal> terminal_;
     std::unique_ptr<ProgressDisplay> progress_display_;
     std::unique_ptr<ArgumentParser> argument_parser;
