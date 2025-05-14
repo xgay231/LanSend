@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../util/config.hpp"
-#include "../util/logger.hpp"
+#include "../utils/config.hpp"
+#include "../utils/logger.hpp"
 #include <boost/asio/ssl/context.hpp>
 #include <filesystem>
 #include <memory>

@@ -7,8 +7,8 @@
 #include "../models/transfer_progress.hpp"
 #include "../security/certificate_manager.hpp"
 #include "../transfer/transfer_manager.hpp"
-#include "../util/config.hpp"
-#include "../util/logger.hpp"
+#include "../utils/config.hpp"
+#include "../utils/logger.hpp"
 #include <boost/asio.hpp>
 #include <cstdint>
 #include <filesystem>

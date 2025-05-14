@@ -1,6 +1,6 @@
 #include "core/network_manager.hpp"
-#include "util/config.hpp"
-#include "util/logger.hpp"
+#include "utils/config.hpp"
+#include "utils/logger.hpp"
 #include <boost/asio.hpp>
 #include <iostream>
 #include <memory>

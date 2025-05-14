@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../models/device_info.hpp"
-#include "../util/config.hpp"
-#include "../util/logger.hpp"
+#include "../utils/config.hpp"
+#include "../utils/logger.hpp"
 #include <boost/asio.hpp>
 #include <chrono>
 #include <cstdint>
