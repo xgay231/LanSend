@@ -72,17 +72,6 @@ std::string CertificateManager::calculate_certificate_hash(const std::string& ce
     return ss.str();
 }
 
-bool CertificateManager::set_hostname(SSL* ssl, const std::string& hostname) const {
-    if (!ssl)
-        return false;
-
-    if (!SSL_set_tlsext_host_name(ssl, hostname.c_str())) {
-        return false;
-    }
-
-    return true;
-}
-
 bool CertificateManager::verify_certificate(bool preverified, ssl::verify_context& ctx) {
     // Get the certificate being verified
     X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());

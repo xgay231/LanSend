@@ -19,8 +19,6 @@ public:
 
     static std::string calculate_certificate_hash(const std::string& certificatePem);
 
-    bool set_hostname(SSL* ssl, const std::string& hostname) const;
-
     bool verify_certificate(bool preverified, boost::asio::ssl::verify_context& ctx);
 
     void trust_host(const std::string& hostname, const std::string& fingerprint);
