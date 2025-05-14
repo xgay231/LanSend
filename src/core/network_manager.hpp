@@ -21,9 +21,9 @@
 class DiscoveryManager;
 class TransferManager;
 class CertificateManager;
-class RestApiHandler; // 假设这个文件只包含前向声明
 class Config;
-class Logger;
+class RestApiHandler; // 假设这个文件只包含前向声明
+
 namespace lansend {
 namespace api {
 class HttpServer;
@@ -32,7 +32,7 @@ class HttpServer;
 
 class NetworkManager {
 public:
-    NetworkManager(boost::asio::io_context& ioc);
+    NetworkManager(boost::asio::io_context& ioc, Config& config);
     ~NetworkManager();
 
     // 启动服务
@@ -47,8 +47,14 @@ public:
     TransferManager& get_transfer_manager();
 
     // 文件传输相关
-    boost::asio::awaitable<TransferResult> send_file(const lansend::models::DeviceInfo& target,
-                                                     const std::filesystem::path& filepath);
+    std::future<TransferResult> send_file(const lansend::models::DeviceInfo& target,
+                                          const std::filesystem::path& filepath);
+
+    // 获取传输管理器实例引用
+    TransferManager& get_transfer_manager();
+
+    // 获取当前活动的传输列表引用
+    std::vector<TransferState>& get_active_transfers();
 
     // 为Electron预留的事件通知接口
     void set_device_found_callback(std::function<void(const lansend::models::DeviceInfo&)> callback);
@@ -56,8 +62,8 @@ public:
         std::function<void(const lansend::models::TransferProgress&)> callback);
     void set_transfer_complete_callback(std::function<void(const TransferResult&)> callback);
 
-
 private:
+    Config* config_;
     boost::asio::io_context& io_context_;
 
     std::unique_ptr<lansend::api::HttpServer> server_;
