@@ -1,27 +1,46 @@
 #pragma once
 
-// #include "../util/config.hpp" // Removed
-#include "../utils/logger.hpp"
 #include <filesystem>
 #include <memory>
+#include <openssl/evp.h>
+#include <spdlog/spdlog.h>
 #include <string>
-#include <vector>
 
 class FileHasher {
 public:
     FileHasher();
-    ~FileHasher();
+    ~FileHasher() = default;
 
-    // 同步哈希计算
-    std::string calculate_sha256_sync(const std::filesystem::path& filepath);
-
-    // 分块哈希计算
-    bool start_chunked_sha256();
-    bool update_chunk(const std::vector<uint8_t>& chunk);
-    std::string finalize_chunked_sha256();
+    std::string CalculateFileChecksum(const std::filesystem::path& file_path);
+    std::string CalculateDataChecksum(const std::string& data);
 
 private:
-    // OpenSSL相关
-    struct OpenSSLContext;
-    std::unique_ptr<OpenSSLContext> openssl_context_;
+    struct SHA256HashContext {
+        EVP_MD_CTX* md_ctx_ = nullptr;
+        const EVP_MD* md_type_ = nullptr;
+
+        SHA256HashContext() {
+            md_type_ = EVP_sha256();
+            md_ctx_ = EVP_MD_CTX_new();
+            if (!md_ctx_) {
+                spdlog::error("FileHasher: Failed to create EVP_MD_CTX.");
+            }
+            if (!EVP_DigestInit_ex(md_ctx_, md_type_, nullptr)) {
+                spdlog::error("FileHasher: Failed to initialize EVP_MD_CTX.");
+                EVP_MD_CTX_free(md_ctx_);
+                md_ctx_ = nullptr;
+            }
+        }
+
+        ~SHA256HashContext() {
+            if (md_ctx_) {
+                EVP_MD_CTX_free(md_ctx_);
+                md_ctx_ = nullptr;
+            }
+        }
+
+        SHA256HashContext(const SHA256HashContext&) = delete;
+        SHA256HashContext& operator=(const SHA256HashContext&) = delete;
+    };
+    std::unique_ptr<SHA256HashContext> sha256_hash_context_;
 };
