@@ -6,9 +6,12 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 
 namespace lansend {
+
+class RestApiController;
 namespace api {
 
 namespace http = boost::beast::http;
@@ -56,12 +59,12 @@ private:
     // 处理请求
     boost::asio::awaitable<AnyResponse> handle_request(HttpRequest&& request);
 
-private:
     boost::asio::io_context& io_context_;
     boost::asio::ssl::context& ssl_context_;
     boost::asio::ip::tcp::acceptor acceptor_;
     bool running_;
     std::map<std::string, RouteInfo> routes_;
+    std::unique_ptr<RestApiController> controller_;
 };
 
 } // namespace api

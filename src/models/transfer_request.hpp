@@ -1,5 +1,5 @@
 #pragma once
-#include "device_info.hpp"
+#include "device_info.h"
 #include <cstdint>
 #include <map>
 #include <nlohmann/json.hpp>

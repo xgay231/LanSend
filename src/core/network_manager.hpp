@@ -1,9 +1,9 @@
 #pragma once
 
 #include "../api/http_server.hpp"
-#include "../api/rest_api_handler.hpp"
+#include "../controller/rest_api_controller.h"
 #include "../discovery/discovery_manager.hpp"
-#include "../models/device_info.hpp"
+#include "../models/device_info.h"
 #include "../models/transfer_progress.hpp"
 #include "../security/certificate_manager.hpp"
 #include "../transfer/transfer_manager.hpp"
@@ -22,7 +22,7 @@ class DiscoveryManager;
 class TransferManager;
 class CertificateManager;
 class Config;
-class RestApiHandler; // 假设这个文件只包含前向声明
+class RestApiController; // 假设这个文件只包含前向声明
 
 namespace lansend {
 namespace api {

@@ -5,6 +5,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http/string_body_fwd.hpp>
+#include <constants/path.hpp>
 #include <filesystem>
 #include <models/file_chunk_info.h>
 #include <nlohmann/detail/macro_scope.hpp>
@@ -19,7 +20,8 @@ class ReceiveController {
 public:
     using FileId = std::string;
 
-    ReceiveController(api::HttpServer& server, const std::filesystem::path& save_dir);
+    ReceiveController(api::HttpServer& server,
+                      const std::filesystem::path& save_dir = path::kSystemDownloadDir);
     ~ReceiveController() = default;
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>>

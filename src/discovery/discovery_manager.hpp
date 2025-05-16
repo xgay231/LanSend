@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../models/device_info.hpp"
+#include "../models/device_info.h"
 #include "../utils/config.hpp"
 #include "../utils/logger.hpp"
 #include <boost/asio.hpp>

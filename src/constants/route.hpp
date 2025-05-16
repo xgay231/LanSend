@@ -6,6 +6,7 @@ namespace lansend {
 
 class ApiRoute {
 public:
+    static constexpr std::string_view kPing = "/ping";
     static constexpr std::string_view kInfo = "/info";
     static constexpr std::string_view kSendRequest = "/send-request";
     static constexpr std::string_view kPrepareSend = "/prepare-send";

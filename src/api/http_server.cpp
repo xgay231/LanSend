@@ -1,5 +1,6 @@
 
 #include "http_server.hpp"
+#include "controller/rest_api_controller.h"
 #include "spdlog/spdlog.h"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -29,6 +30,7 @@ HttpServer::HttpServer(net::io_context& io_context, ssl::context& ssl_context)
     , ssl_context_(ssl_context)
     , acceptor_(io_context)
     , running_(false) {
+    controller_ = std::make_unique<RestApiController>(*this);
     spdlog::info("HttpServer created.");
 }
 

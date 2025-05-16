@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../models/device_info.hpp"
+#include "../models/device_info.h"
 #include "../models/transfer_metadata.hpp"
 #include "../utils/config.hpp"
 #include "../utils/logger.hpp"

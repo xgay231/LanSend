@@ -1,5 +1,5 @@
 #pragma once
-#include "device_info.hpp"
+#include "device_info.h"
 #include "transfer_metadata.hpp"
 #include <cstdint>
 #include <map>
