@@ -29,6 +29,8 @@ std::string FileHasher::CalculateFileChecksum(const std::filesystem::path& file_
     constexpr size_t buffer_size = 8192;
     std::vector<char> buffer(buffer_size);
 
+    EVP_DigestInit_ex(sha256_hash_context_->md_ctx_, sha256_hash_context_->md_type_, nullptr);
+
     while (file) {
         file.read(buffer.data(), buffer_size);
         size_t bytes_read = file.gcount();
@@ -55,6 +57,9 @@ std::string FileHasher::CalculateDataChecksum(const std::string& data) {
                       "md_ctx_ is null).");
         return "";
     }
+
+    EVP_DigestInit_ex(sha256_hash_context_->md_ctx_, sha256_hash_context_->md_type_, nullptr);
+
     EVP_DigestUpdate(sha256_hash_context_->md_ctx_, data.data(), data.size());
 
     unsigned char hash[EVP_MAX_MD_SIZE];

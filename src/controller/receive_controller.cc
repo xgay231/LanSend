@@ -26,7 +26,8 @@ ReceiveController::ReceiveController(HttpServer& server, const std::filesystem::
 
 net::awaitable<http::response<http::string_body>> ReceiveController::OnPrepareSend(
     const http::request<http::vector_body<std::uint8_t>>& req) {
-    http::response<http::vector_body<std::uint8_t>> res{http::status::ok, req.version()};
+    spdlog::debug("ReceiveController::OnPrepareSend");
+    http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/octet-stream");
     res.set(http::field::connection, "keep-alive");
@@ -63,10 +64,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnPrepareSe
         response_metadata["file_id"] = file_info.file_id;
         response_metadata["success"] = true;
 
-        std::vector<std::uint8_t> response_binary
-            = BinaryMessageHelper::Create(MessageType::kFileStart, response_metadata);
-
-        res.body() = std::move(response_binary);
+        res.body() = response_metadata.dump();
 
         spdlog::info("Started receiving file {} ({}), {} chunks expected",
                      file_info.file_name,
@@ -79,20 +77,19 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnPrepareSe
         error_metadata["success"] = false;
         error_metadata["error"] = e.what();
 
-        std::vector<std::uint8_t> error_binary = BinaryMessageHelper::Create(MessageType::kError,
-                                                                             error_metadata);
-
         res.result(http::status::bad_request);
-        res.body() = std::move(error_binary);
+        res.body() = error_metadata.dump();
     }
 
     res.prepare_payload();
+    spdlog::debug("ReceiveController::OnPrepareSend co_return");
     co_return res;
 }
 
 net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk(
     const http::request<http::vector_body<std::uint8_t>>& req) {
-    http::response<http::vector_body<std::uint8_t>> res{http::status::ok, req.version()};
+    spdlog::debug("ReceiveController::OnSendChunk");
+    http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/octet-stream");
     res.set(http::field::connection, "keep-alive");
@@ -141,10 +138,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk
                 response_metadata["success"] = true;
                 response_metadata["chunk"] = chunk_info.current_chunk;
 
-                std::vector<std::uint8_t> response_binary
-                    = BinaryMessageHelper::Create(MessageType::kFileChunkAck, response_metadata);
-
-                res.body() = std::move(response_binary);
+                res.body() = response_metadata.dump();
                 res.prepare_payload();
                 co_return res;
             }
@@ -190,10 +184,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk
         response_metadata["success"] = true;
         response_metadata["chunk"] = chunk_info.current_chunk;
 
-        std::vector<std::uint8_t> response_binary
-            = BinaryMessageHelper::Create(MessageType::kFileChunkAck, response_metadata);
-
-        res.body() = std::move(response_binary);
+        res.body() = response_metadata.dump();
     } catch (const std::exception& e) {
         spdlog::error("Error processing file chunk: {}", e.what());
 
@@ -201,11 +192,8 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk
         error_metadata["success"] = false;
         error_metadata["error"] = e.what();
 
-        std::vector<std::uint8_t> error_binary = BinaryMessageHelper::Create(MessageType::kError,
-                                                                             error_metadata);
-
         res.result(http::status::bad_request);
-        res.body() = std::move(error_binary);
+        res.body() = error_metadata.dump();
     }
 
     res.prepare_payload();
@@ -214,10 +202,10 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk
 
 net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAndComplete(
     const http::request<http::vector_body<std::uint8_t>>& req) {
-    http::response<http::vector_body<std::uint8_t>> res{http::status::ok, req.version()};
+    spdlog::debug("ReceiveController::OnVerifyAndComplete");
+    http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/octet-stream");
-    res.set(http::field::connection, "keep-alive");
 
     try {
         const auto& binary_data = req.body();
@@ -299,10 +287,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAnd
         response_metadata["checksum"] = actual_checksum;
         response_metadata["path"] = final_path.string();
 
-        std::vector<std::uint8_t> response_binary
-            = BinaryMessageHelper::Create(MessageType::kComplete, response_metadata);
-
-        res.body() = std::move(response_binary);
+        res.body() = response_metadata.dump();
     } catch (const std::exception& e) {
         spdlog::error("Error finalizing file transfer: {}", e.what());
 
@@ -310,11 +295,8 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAnd
         error_metadata["success"] = false;
         error_metadata["error"] = e.what();
 
-        std::vector<std::uint8_t> error_binary = BinaryMessageHelper::Create(MessageType::kError,
-                                                                             error_metadata);
-
         res.result(http::status::bad_request);
-        res.body() = std::move(error_binary);
+        res.body() = error_metadata.dump();
     }
 
     res.prepare_payload();
@@ -324,7 +306,8 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAnd
 net::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
 ReceiveController::OnCancelSend(
     const http::request<boost::beast::http::vector_body<std::uint8_t>>& req) {
-    http::response<http::vector_body<std::uint8_t>> res{http::status::ok, req.version()};
+    spdlog::debug("ReceiveController::OnCancelSend");
+    http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/octet-stream");
     res.set(http::field::connection, "keep-alive");
@@ -386,10 +369,7 @@ ReceiveController::OnCancelSend(
         }
         response_metadata["message"] = found ? "Transfer cancelled" : "Transfer not found";
 
-        std::vector<std::uint8_t> response_binary
-            = BinaryMessageHelper::Create(MessageType::kComplete, response_metadata);
-
-        res.body() = std::move(response_binary);
+        res.body() = response_metadata.dump();
     } catch (const std::exception& e) {
         spdlog::error("Error cancelling file transfer: {}", e.what());
 
@@ -397,11 +377,8 @@ ReceiveController::OnCancelSend(
         error_metadata["success"] = false;
         error_metadata["error"] = e.what();
 
-        std::vector<std::uint8_t> error_binary = BinaryMessageHelper::Create(MessageType::kError,
-                                                                             error_metadata);
-
         res.result(http::status::bad_request);
-        res.body() = std::move(error_binary);
+        res.body() = error_metadata.dump();
     }
 
     res.prepare_payload();
@@ -417,30 +394,20 @@ void ReceiveController::SetSaveDirectory(const std::filesystem::path& save_dir) 
 }
 
 void ReceiveController::InstallRoutes() {
-    server_.add_route(ApiRoute::kPrepareSend.data(),
-                      http::verb::post,
-                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<AnyResponse> {
-                          co_return this->OnPrepareSend(std::move(req));
-                      });
-    server_.add_route(ApiRoute::kSendChunk.data(),
-                      http::verb::post,
-                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<AnyResponse> {
-                          co_return this->OnSendChunk(std::move(req));
-                      });
-    server_.add_route(ApiRoute::kVerifyAndComplete.data(),
-                      http::verb::post,
-                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<AnyResponse> {
-                          co_return this->OnVerifyAndComplete(std::move(req));
-                      });
-    server_.add_route(ApiRoute::kCancelSend.data(),
-                      http::verb::post,
-                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<AnyResponse> {
-                          co_return this->OnCancelSend(std::move(req));
-                      });
+    server_.AddRoute(ApiRoute::kPrepareSend.data(),
+                     http::verb::post,
+                     std::bind(&ReceiveController::OnPrepareSend, this, std::placeholders::_1));
+    server_.AddRoute(ApiRoute::kSendChunk.data(),
+                     http::verb::post,
+                     std::bind(&ReceiveController::OnSendChunk, this, std::placeholders::_1));
+    server_.AddRoute(ApiRoute::kVerifyAndComplete.data(),
+                     http::verb::post,
+                     std::bind(&ReceiveController::OnVerifyAndComplete,
+                               this,
+                               std::placeholders::_1));
+    server_.AddRoute(ApiRoute::kCancelSend.data(),
+                     http::verb::post,
+                     std::bind(&ReceiveController::OnCancelSend, this, std::placeholders::_1));
 }
 
 } // namespace lansend

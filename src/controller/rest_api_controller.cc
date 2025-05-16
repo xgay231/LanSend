@@ -1,5 +1,6 @@
 #include "rest_api_controller.h"
 #include "controller/receive_controller.h"
+#include "network/http_server.hpp"
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <constants/route.hpp>
 #include <models/device_info.h>
@@ -21,6 +22,7 @@ RestApiController::RestApiController(HttpServer& server)
 
 net::awaitable<http::response<http::string_body>> RestApiController::OnPing(
     const http::request<http::vector_body<std::uint8_t>>& req) {
+    spdlog::debug("RestApiController::OnPing");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/json");
@@ -37,6 +39,7 @@ net::awaitable<http::response<http::string_body>> RestApiController::OnPing(
 
 net::awaitable<http::response<http::string_body>> RestApiController::OnInfo(
     const http::request<http::vector_body<std::uint8_t>>& req) {
+    spdlog::debug("RestApiController::OnInfo");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/json");
@@ -54,14 +57,12 @@ net::awaitable<http::response<http::string_body>> RestApiController::OnInfo(
 }
 
 void RestApiController::InstallRoutes() {
-    server_.add_route(ApiRoute::kPing.data(),
-                      http::verb::get,
-                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<AnyResponse> { co_return this->OnPing(req); });
-    server_.add_route(ApiRoute::kInfo.data(),
-                      http::verb::get,
-                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<AnyResponse> { co_return this->OnInfo(req); });
+    server_.AddRoute(ApiRoute::kPing.data(),
+                     http::verb::get,
+                     std::bind(&RestApiController::OnPing, this, std::placeholders::_1));
+    server_.AddRoute(ApiRoute::kInfo.data(),
+                     http::verb::get,
+                     std::bind(&RestApiController::OnInfo, this, std::placeholders::_1));
 }
 
 } // namespace lansend

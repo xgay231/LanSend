@@ -12,6 +12,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
+#include <constants/transfer.h>
 
 namespace lansend {
 
@@ -40,7 +41,7 @@ HttpServer::~HttpServer() {
     spdlog::info("HttpServer destroyed.");
 }
 
-void HttpServer::add_route(const std::string& path, http::verb method, RouteHandler handler) {
+void HttpServer::AddRoute(const std::string& path, http::verb method, RouteHandler handler) {
     routes_[path] = {method, std::move(handler)};
     spdlog::info(std::format("Added route: {} {}", std::string(http::to_string(method)), path));
 }
@@ -86,11 +87,12 @@ void HttpServer::stop() {
 boost::asio::awaitable<void> HttpServer::accept_connections() {
     while (running_) {
         try {
-            tcp::socket socket = co_await acceptor_.async_accept(net::use_awaitable);
+            tcp::socket socket = co_await acceptor_.async_accept();
             spdlog::info(std::format("Accepted connection from: {}",
                                      std::string(socket.remote_endpoint().address().to_string())));
 
-            ssl::stream<tcp::socket> stream(std::move(socket), ssl_context_);
+            beast::ssl_stream<beast::tcp_stream> stream(beast::tcp_stream(std::move(socket)),
+                                                        ssl_context_);
 
             net::co_spawn(io_context_, handle_connection(std::move(stream)), net::detached);
         } catch (const boost::system::system_error& e) {
@@ -107,103 +109,77 @@ boost::asio::awaitable<void> HttpServer::accept_connections() {
     spdlog::info("Stopped accepting connections.");
 }
 
-boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<tcp::socket> stream) {
-    auto executor = co_await net::this_coro::executor;
-    net::steady_timer timer(executor);
-    beast::error_code timer_ec;
-
+boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<beast::tcp_stream> stream) {
     try {
+        auto& socket = stream.next_layer().socket();
+        auto endpoint = socket.remote_endpoint();
+        spdlog::info("New connection from: {}:{}", endpoint.address().to_string(), endpoint.port());
+
         co_await stream.async_handshake(ssl::stream_base::server, net::use_awaitable);
-        spdlog::info("SSL handshake successful.");
+        spdlog::debug("SSL handshake completed successfully");
 
         beast::flat_buffer buffer;
-        constexpr std::chrono::seconds keep_alive_timeout{120};
+        bool keep_alive = true;
 
-        while (stream.next_layer().is_open()) {
-            timer.expires_after(keep_alive_timeout);
-            timer_ec.clear();
+        while (keep_alive) {
+            try {
+                beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
 
-            HttpRequest req;
-            std::variant<std::monostate, std::size_t> result = co_await (
-                timer.async_wait(net::redirect_error(net::use_awaitable, timer_ec))
-                || http::async_read(stream, buffer, req, net::use_awaitable));
+                http::request_parser<http::vector_body<uint8_t>> parser;
+                parser.body_limit(transfer::kMaxChunkSize + 8);
 
-            if (result.index() == 0) {
-                if (!timer_ec) {
-                    spdlog::info(std::format("Keep-alive timeout after {}s. Closing connection.",
-                                             keep_alive_timeout.count()));
-                    break;
-                } else if (timer_ec == net::error::operation_aborted) {
-                    spdlog::info(
-                        "Keep-alive timer cancelled (operation_aborted). Connection closing.");
-                    break;
-                } else {
-                    spdlog::error(std::format("Keep-alive timer error: {}. Closing connection.",
-                                              timer_ec.message()));
+                spdlog::debug("Waiting for client request...");
+                co_await http::async_read(stream, buffer, parser);
+                auto req = parser.release();
+
+                spdlog::info("Received {} request for {}", req.method_string(), req.target());
+
+                keep_alive = (req[http::field::connection] != "close");
+
+                HttpResponse res = co_await handle_request(std::move(req));
+
+                co_await http::async_write(stream, res);
+
+                if (!keep_alive) {
+                    spdlog::debug("Connection: close requested, ending session");
                     break;
                 }
-            }
-
-            timer.cancel();
-
-            spdlog::info(std::format("Received request: {} {}",
-                                     std::string(http::to_string(req.method())),
-                                     std::string(req.target())));
-
-            AnyResponse res = co_await handle_request(std::move(req));
-
-            bool keep_alive = std::visit([](const auto& response) { return response.keep_alive(); },
-                                         res);
-
-            co_await std::visit(
-                [&](auto&& response) {
-                    return http::async_write(stream,
-                                             std::forward<decltype(response)>(response),
-                                             net::use_awaitable);
-                },
-                std::move(res));
-
-            if (!keep_alive) {
-                break;
+            } catch (const boost::system::system_error& e) {
+                if (e.code() == boost::beast::error::timeout || e.code() == boost::asio::error::eof
+                    || e.code() == boost::asio::error::operation_aborted
+                    || e.code() == boost::beast::http::error::end_of_stream) {
+                    spdlog::debug("Connection closed by peer: {}", e.code().message());
+                    break;
+                }
+                throw e;
             }
         }
-    } catch (const boost::system::system_error& e) {
-        if (e.code() == net::error::eof || e.code() == ssl::error::stream_truncated
-            || e.code() == http::error::end_of_stream || e.code() == net::error::connection_reset) {
-            spdlog::info(std::format("Connection closed by peer: {}", e.what()));
-        } else if (e.code() != net::error::operation_aborted) {
-            spdlog::error(std::format("Connection error: {}", e.what()));
+
+        spdlog::debug("Closing connection gracefully");
+        beast::error_code ec;
+        stream.shutdown(ec);
+        if (ec && ec != net::error::eof) {
+            spdlog::debug("Shutdown notice: {}", ec.message());
         }
     } catch (const std::exception& e) {
-        spdlog::error(std::format("Unexpected error handling connection: {}", e.what()));
-    }
-
-    try {
-        timer.cancel();
-
-        co_await stream.async_shutdown(net::use_awaitable);
-    } catch (const boost::system::system_error& e) {
-        if (e.code() != net::error::eof && e.code() != ssl::error::stream_truncated
-            && e.code() != net::error::connection_reset
-            && e.code() != net::error::operation_aborted) {
-            spdlog::warn(std::format("Error during SSL shutdown: {}", e.what()));
+        std::string error_msg = e.what();
+        if (error_msg.find("end of stream") != std::string::npos
+            || error_msg.find("stream truncated") != std::string::npos
+            || error_msg.find("operation canceled") != std::string::npos) {
+            spdlog::debug("Session ended: {}", error_msg);
+        } else {
+            spdlog::error("Session error: {}", error_msg);
         }
-    } catch (const std::exception& e) {
-        spdlog::warn(std::format("Unexpected error during SSL shutdown: {}", e.what()));
     }
     spdlog::info("Connection handling finished.");
 }
 
-boost::asio::awaitable<AnyResponse> HttpServer::handle_request(HttpRequest&& req) {
-    AnyResponse res;
-    std::visit(
-        [&](auto&& response) {
-            response.version(req.version());
-            response.keep_alive(req.keep_alive());
-            response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-            response.set(http::field::content_type, "application/json");
-        },
-        res);
+boost::asio::awaitable<HttpResponse> HttpServer::handle_request(HttpRequest&& req) {
+    HttpResponse res;
+    res.version(req.version());
+    res.keep_alive(req.keep_alive());
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "application/json");
 
     std::string path(req.target());
     auto it = routes_.find(path);

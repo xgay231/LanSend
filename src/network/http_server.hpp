@@ -2,6 +2,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http.hpp>
 #include <cstdint>
 #include <functional>
@@ -15,12 +16,9 @@ class RestApiController;
 
 using HttpRequest = boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>;
 using HttpResponse = boost::beast::http::response<boost::beast::http::string_body>;
-using HttpChunkResponse = boost::beast::http::response<boost::beast::http::vector_body<std::uint8_t>>;
-using AnyResponse = std::variant<HttpResponse, HttpChunkResponse>;
 
 // 路由处理器函数类型
-// using RouteHandler = std::function<boost::asio::awaitable<HttpResponse>(HttpRequest&&)>;
-using RouteHandler = std::function<boost::asio::awaitable<AnyResponse>(HttpRequest&&)>;
+using RouteHandler = std::function<boost::asio::awaitable<HttpResponse>(HttpRequest&&)>;
 
 // 路由信息结构体
 struct RouteInfo {
@@ -38,7 +36,7 @@ public:
     ~HttpServer();
 
     // 添加路由
-    void add_route(const std::string& path, boost::beast::http::verb method, RouteHandler handler);
+    void AddRoute(const std::string& path, boost::beast::http::verb method, RouteHandler handler);
 
     // 启动服务器
     void start(uint16_t port);
@@ -52,10 +50,10 @@ private:
 
     // 处理连接
     boost::asio::awaitable<void> handle_connection(
-        boost::asio::ssl::stream<boost::asio::ip::tcp::socket> stream);
+        boost::asio::ssl::stream<boost::beast::tcp_stream> stream);
 
     // 处理请求
-    boost::asio::awaitable<AnyResponse> handle_request(HttpRequest&& request);
+    boost::asio::awaitable<HttpResponse> handle_request(HttpRequest&& request);
 
     boost::asio::io_context& io_context_;
     boost::asio::ssl::context& ssl_context_;
