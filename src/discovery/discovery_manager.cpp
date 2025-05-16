@@ -1,18 +1,17 @@
-#include "../utils/logger.hpp"
-#include <boost/asio/use_awaitable.hpp>
-#include <nlohmann/json.hpp>
-// #include <boost/asio/udp.hpp>
-#include "../models/device_info.hpp"
-#include "../models/transfer_progress.hpp"
 #include "discovery_manager.hpp"
+#include "../models/device_info.h"
+#include "../models/transfer_progress.hpp"
+#include "../utils/logger.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/ip/address_v4.hpp>
 #include <boost/asio/ip/multicast.hpp>
 #include <boost/asio/ip/udp.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <chrono>
 #include <iostream>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <random>
 using json = nlohmann::json;
 using namespace boost::asio;
@@ -124,15 +123,7 @@ awaitable<void> DiscoveryManager::broadcaster() {
         const uint16_t broadcast_port = 37020;
         ip::udp::endpoint broadcast_endpoint(ip::make_address(broadcast_address), broadcast_port);
 
-        // 模拟设备信息
-        lansend::models::DeviceInfo self_device;
-        self_device.device_id = device_id_;
-        self_device.alias = "Self Device";
-        self_device.device_model = "win";
-        self_device.ip_address = "127.0.0.1";
-        self_device.port = 37020;
-
-        json device_json = self_device;
+        json device_json = lansend::models::DeviceInfo::LocalDeviceInfo();
         std::string data = device_json.dump();
 
         while (broadcast_socket_.is_open()) {

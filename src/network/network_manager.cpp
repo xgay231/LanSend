@@ -11,7 +11,7 @@ NetworkManager::NetworkManager(boost::asio::io_context& ioc, Config& config)
     , config_(&config)
     , cert_manager_(std::make_unique<CertificateManager>(std::filesystem::path("certificates")))
     , ssl_context_(boost::asio::ssl::context::tlsv12_server)
-    , server_(std::make_unique<lansend::api::HttpServer>(ioc, ssl_context_))
+    , server_(std::make_unique<lansend::HttpServer>(ioc, ssl_context_))
     , discovery_manager_(std::make_unique<DiscoveryManager>(ioc))
     , transfer_manager_(std::make_unique<TransferManager>(ioc, lansend::settings)) {
     // 配置SSL上下文

@@ -1,16 +1,16 @@
 #pragma once
 
 #include "controller/receive_controller.h"
-#include <api/http_server.hpp>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http/string_body_fwd.hpp>
+#include <network/http_server.hpp>
 
 namespace lansend {
 
 class RestApiController {
 public:
-    RestApiController(api::HttpServer& server);
+    RestApiController(HttpServer& server);
     ~RestApiController() = default;
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>> OnPing(
@@ -22,7 +22,7 @@ public:
 private:
     void InstallRoutes();
 
-    api::HttpServer& server_;
+    HttpServer& server_;
     ReceiveController receive_controller_;
 };
 

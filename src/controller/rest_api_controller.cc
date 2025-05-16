@@ -12,16 +12,15 @@ using json = nlohmann::json;
 
 namespace lansend {
 
-RestApiController::RestApiController(api::HttpServer& server)
+RestApiController::RestApiController(HttpServer& server)
     : server_(server)
     , receive_controller_(server) {
     InstallRoutes();
     receive_controller_.SetSaveDirectory(settings.saveDir);
 }
 
-boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
-RestApiController::OnPing(
-    const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req) {
+net::awaitable<http::response<http::string_body>> RestApiController::OnPing(
+    const http::request<http::vector_body<std::uint8_t>>& req) {
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/json");
@@ -36,9 +35,8 @@ RestApiController::OnPing(
     co_return res;
 }
 
-boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
-RestApiController::OnInfo(
-    const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req) {
+net::awaitable<http::response<http::string_body>> RestApiController::OnInfo(
+    const http::request<http::vector_body<std::uint8_t>>& req) {
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/json");
@@ -59,11 +57,11 @@ void RestApiController::InstallRoutes() {
     server_.add_route(ApiRoute::kPing.data(),
                       http::verb::get,
                       [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<api::AnyResponse> { co_return this->OnPing(req); });
+                          -> net::awaitable<AnyResponse> { co_return this->OnPing(req); });
     server_.add_route(ApiRoute::kInfo.data(),
                       http::verb::get,
                       [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<api::AnyResponse> { co_return this->OnInfo(req); });
+                          -> net::awaitable<AnyResponse> { co_return this->OnInfo(req); });
 }
 
 } // namespace lansend

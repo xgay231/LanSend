@@ -1,6 +1,6 @@
 #pragma once
 
-#include "api/http_server.hpp"
+#include "network/http_server.hpp"
 #include "transfer/file_hasher.hpp"
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -20,7 +20,7 @@ class ReceiveController {
 public:
     using FileId = std::string;
 
-    ReceiveController(api::HttpServer& server,
+    ReceiveController(HttpServer& server,
                       const std::filesystem::path& save_dir = path::kSystemDownloadDir);
     ~ReceiveController() = default;
 
@@ -43,7 +43,7 @@ public:
 private:
     void InstallRoutes();
 
-    api::HttpServer& server_;
+    HttpServer& server_;
     std::filesystem::path save_dir_;
     std::unordered_map<FileId, std::filesystem::path> active_transfers_;
     std::unordered_map<FileId, FileChunkInfo> file_metadata_;

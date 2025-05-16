@@ -12,12 +12,10 @@
 namespace lansend {
 
 class RestApiController;
-namespace api {
 
-namespace http = boost::beast::http;
-using HttpRequest = http::request<http::vector_body<std::uint8_t>>;
-using HttpResponse = http::response<http::string_body>;
-using HttpChunkResponse = http::response<http::vector_body<std::uint8_t>>;
+using HttpRequest = boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>;
+using HttpResponse = boost::beast::http::response<boost::beast::http::string_body>;
+using HttpChunkResponse = boost::beast::http::response<boost::beast::http::vector_body<std::uint8_t>>;
 using AnyResponse = std::variant<HttpResponse, HttpChunkResponse>;
 
 // 路由处理器函数类型
@@ -26,7 +24,7 @@ using RouteHandler = std::function<boost::asio::awaitable<AnyResponse>(HttpReque
 
 // 路由信息结构体
 struct RouteInfo {
-    http::verb method;
+    boost::beast::http::verb method;
     RouteHandler handler;
 };
 
@@ -40,7 +38,7 @@ public:
     ~HttpServer();
 
     // 添加路由
-    void add_route(const std::string& path, http::verb method, RouteHandler handler);
+    void add_route(const std::string& path, boost::beast::http::verb method, RouteHandler handler);
 
     // 启动服务器
     void start(uint16_t port);
@@ -67,5 +65,4 @@ private:
     std::unique_ptr<RestApiController> controller_;
 };
 
-} // namespace api
 } // namespace lansend

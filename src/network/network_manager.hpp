@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../api/http_server.hpp"
 #include "../controller/rest_api_controller.h"
 #include "../discovery/discovery_manager.hpp"
 #include "../models/device_info.h"
 #include "../models/transfer_progress.hpp"
+#include "../network/http_server.hpp"
 #include "../security/certificate_manager.hpp"
 #include "../transfer/transfer_manager.hpp"
 #include "../utils/config.hpp"
@@ -25,9 +25,8 @@ class Config;
 class RestApiController; // 假设这个文件只包含前向声明
 
 namespace lansend {
-namespace api {
 class HttpServer;
-}
+
 } // namespace lansend
 
 class NetworkManager {
@@ -65,7 +64,7 @@ private:
     Config* config_;
     boost::asio::io_context& io_context_;
 
-    std::unique_ptr<lansend::api::HttpServer> server_;
+    std::unique_ptr<lansend::HttpServer> server_;
     std::unique_ptr<DiscoveryManager> discovery_manager_;
     std::unique_ptr<TransferManager> transfer_manager_;
     std::unique_ptr<CertificateManager> cert_manager_;

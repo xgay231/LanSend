@@ -1,5 +1,4 @@
 #include "receive_controller.h"
-#include "api/http_server.hpp"
 #include "constants/route.hpp"
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <fstream>
@@ -16,7 +15,7 @@ using json = nlohmann::json;
 
 namespace lansend {
 
-ReceiveController::ReceiveController(api::HttpServer& server, const std::filesystem::path& save_dir)
+ReceiveController::ReceiveController(HttpServer& server, const std::filesystem::path& save_dir)
     : server_(server)
     , save_dir_(save_dir) {
     if (!std::filesystem::exists(save_dir_)) {
@@ -421,25 +420,25 @@ void ReceiveController::InstallRoutes() {
     server_.add_route(ApiRoute::kPrepareSend.data(),
                       http::verb::post,
                       [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<api::AnyResponse> {
+                          -> net::awaitable<AnyResponse> {
                           co_return this->OnPrepareSend(std::move(req));
                       });
     server_.add_route(ApiRoute::kSendChunk.data(),
                       http::verb::post,
                       [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<api::AnyResponse> {
+                          -> net::awaitable<AnyResponse> {
                           co_return this->OnSendChunk(std::move(req));
                       });
     server_.add_route(ApiRoute::kVerifyAndComplete.data(),
                       http::verb::post,
                       [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<api::AnyResponse> {
+                          -> net::awaitable<AnyResponse> {
                           co_return this->OnVerifyAndComplete(std::move(req));
                       });
     server_.add_route(ApiRoute::kCancelSend.data(),
                       http::verb::post,
                       [this](http::request<http::vector_body<std::uint8_t>>&& req)
-                          -> net::awaitable<api::AnyResponse> {
+                          -> net::awaitable<AnyResponse> {
                           co_return this->OnCancelSend(std::move(req));
                       });
 }

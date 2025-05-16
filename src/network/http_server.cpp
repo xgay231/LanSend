@@ -14,7 +14,6 @@
 #include <boost/beast/version.hpp>
 
 namespace lansend {
-namespace api {
 
 // Introduce awaitable operators for convenience.
 using namespace boost::asio::experimental::awaitable_operators;
@@ -263,5 +262,4 @@ boost::asio::awaitable<AnyResponse> HttpServer::handle_request(HttpRequest&& req
     co_return res;
 }
 
-} // namespace api
 } // namespace lansend
