@@ -1,5 +1,7 @@
-#include "device.hpp"
+#include "system.h"
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/host_name.hpp>
+#include <boost/asio/ip/udp.hpp>
 #include <cstring>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -14,9 +16,9 @@
 
 namespace lansend {
 
-namespace device {
+namespace system {
 
-std::string hostname() {
+std::string Hostname() {
     std::string hostname = boost::asio::ip::host_name();
     if (hostname.ends_with(".local")) {
         hostname = hostname.substr(0, hostname.size() - 6);
@@ -28,7 +30,27 @@ std::string hostname() {
     return hostname;
 }
 
-std::string os_infomation() {
+std::string PublicIpv4Address() {
+    try {
+        namespace net = boost::asio;
+        net::io_context io_context;
+
+        net::ip::udp::socket socket(io_context);
+
+        socket.connect(
+            boost::asio::ip::udp::endpoint(boost::asio::ip::make_address_v4("223.5.5.5"), 53));
+
+        net::ip::udp::endpoint local_endpoint = socket.local_endpoint();
+        std::string local_ip = local_endpoint.address().to_string();
+
+        return local_ip;
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to get public IPv4 address: {}", e.what());
+        return "127.0.0.1";
+    }
+}
+
+std::string OperatingSystem() {
     std::string pretty_name{};
     constexpr auto architecture =
 #if defined(__x86_64__) || defined(_M_X64)
@@ -130,6 +152,6 @@ std::string os_infomation() {
 #endif
 }
 
-} // namespace device
+} // namespace system
 
 } // namespace lansend
