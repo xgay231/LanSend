@@ -12,9 +12,9 @@ namespace lansend {
 namespace api {
 
 namespace http = boost::beast::http;
-using HttpRequest = http::request<http::string_body>;
+using HttpRequest = http::request<http::vector_body<std::uint8_t>>;
 using HttpResponse = http::response<http::string_body>;
-using HttpChunkResponse = http::response<http::vector_body<char>>;
+using HttpChunkResponse = http::response<http::vector_body<std::uint8_t>>;
 using AnyResponse = std::variant<HttpResponse, HttpChunkResponse>;
 
 // 路由处理器函数类型

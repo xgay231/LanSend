@@ -1,4 +1,5 @@
 #include "receive_controller.h"
+#include "api/http_server.hpp"
 #include "constants/route.hpp"
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <fstream>
@@ -21,6 +22,7 @@ ReceiveController::ReceiveController(api::HttpServer& server, const std::filesys
     if (!std::filesystem::exists(save_dir_)) {
         std::filesystem::create_directories(save_dir_);
     }
+    InstallRoutes();
 }
 
 net::awaitable<http::response<http::string_body>> ReceiveController::OnPrepareSend(
@@ -416,7 +418,30 @@ void ReceiveController::SetSaveDirectory(const std::filesystem::path& save_dir) 
 }
 
 void ReceiveController::InstallRoutes() {
-    // TODO: Implement route installation logic
+    server_.add_route(ApiRoute::kPrepareSend.data(),
+                      http::verb::post,
+                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
+                          -> net::awaitable<api::AnyResponse> {
+                          co_return this->OnPrepareSend(std::move(req));
+                      });
+    server_.add_route(ApiRoute::kSendChunk.data(),
+                      http::verb::post,
+                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
+                          -> net::awaitable<api::AnyResponse> {
+                          co_return this->OnSendChunk(std::move(req));
+                      });
+    server_.add_route(ApiRoute::kVerifyAndComplete.data(),
+                      http::verb::post,
+                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
+                          -> net::awaitable<api::AnyResponse> {
+                          co_return this->OnVerifyAndComplete(std::move(req));
+                      });
+    server_.add_route(ApiRoute::kCancelSend.data(),
+                      http::verb::post,
+                      [this](http::request<http::vector_body<std::uint8_t>>&& req)
+                          -> net::awaitable<api::AnyResponse> {
+                          co_return this->OnCancelSend(std::move(req));
+                      });
 }
 
 } // namespace lansend

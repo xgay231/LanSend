@@ -1,6 +1,6 @@
 
 #include "http_server.hpp"
-#include "../utils/logger.hpp"
+#include "spdlog/spdlog.h"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
