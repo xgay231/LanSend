@@ -13,7 +13,6 @@ public:
     static constexpr std::string_view kSendChunk = "/send-chunk";
     static constexpr std::string_view kVerifyAndComplete = "/verify-and-complete";
     static constexpr std::string_view kCancelSend = "/cancel-send";
-    static constexpr std::string_view kCancelReceive = "/cancel-receive";
 };
 
 } // namespace lansend

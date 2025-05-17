@@ -2,10 +2,9 @@
 #include "constants/route.hpp"
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <fstream>
-#include <models/binary_message_header.h>
 #include <models/message_type.h>
 #include <nlohmann/json.hpp>
-#include <utils/binary_message_helper.h>
+#include <utils/binary_message.h>
 
 namespace net = boost::asio;
 namespace beast = boost::beast;
@@ -25,27 +24,15 @@ ReceiveController::ReceiveController(HttpServer& server, const std::filesystem::
 }
 
 net::awaitable<http::response<http::string_body>> ReceiveController::OnPrepareSend(
-    const http::request<http::vector_body<std::uint8_t>>& req) {
+    const http::request<http::string_body>& req) {
     spdlog::debug("ReceiveController::OnPrepareSend");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/octet-stream");
-    res.set(http::field::connection, "keep-alive");
+    res.set(http::field::content_type, "application/json");
+    res.keep_alive(req.keep_alive());
 
     try {
-        const auto& binary_data = req.body();
-
-        MessageType msg_type;
-        json metadata;
-        std::vector<std::uint8_t> file_data;
-
-        if (!BinaryMessageHelper::Parse(binary_data, msg_type, metadata, file_data)) {
-            throw std::runtime_error("Failed to parse binary message");
-        }
-
-        if (msg_type != MessageType::kFileStart) {
-            throw std::runtime_error("Unexpected message type");
-        }
+        json metadata = json::parse(req.body());
 
         FileChunkInfo file_info;
         nlohmann::from_json(metadata, file_info);
@@ -91,22 +78,16 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk
     spdlog::debug("ReceiveController::OnSendChunk");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/octet-stream");
-    res.set(http::field::connection, "keep-alive");
+    res.set(http::field::content_type, "application/json");
+    res.keep_alive(req.keep_alive());
 
     try {
-        const auto& binary_data = req.body();
+        const BinaryMessage& binary_data = req.body();
 
-        MessageType msg_type;
         json metadata;
-        std::vector<std::uint8_t> chunk_data;
-
-        if (!BinaryMessageHelper::Parse(binary_data, msg_type, metadata, chunk_data)) {
+        BinaryData chunk_data;
+        if (!ParseBinaryMessage(binary_data, metadata, chunk_data)) {
             throw std::runtime_error("Failed to parse binary message");
-        }
-
-        if (msg_type != MessageType::kFileChunk) {
-            throw std::runtime_error("Unexpected message type");
         }
 
         FileChunkInfo chunk_info;
@@ -201,26 +182,15 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk
 }
 
 net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAndComplete(
-    const http::request<http::vector_body<std::uint8_t>>& req) {
+    const http::request<http::string_body>& req) {
     spdlog::debug("ReceiveController::OnVerifyAndComplete");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/octet-stream");
+    res.set(http::field::content_type, "application/json");
+    res.keep_alive(req.keep_alive());
 
     try {
-        const auto& binary_data = req.body();
-
-        MessageType msg_type;
-        json metadata;
-        std::vector<std::uint8_t> unused_data;
-
-        if (!BinaryMessageHelper::Parse(binary_data, msg_type, metadata, unused_data)) {
-            throw std::runtime_error("Failed to parse binary message");
-        }
-
-        if (msg_type != MessageType::kFileEnd) {
-            throw std::runtime_error("Unexpected message type");
-        }
+        json metadata = json::parse(req.body());
 
         std::string file_id = metadata["file_id"].get<std::string>();
 
@@ -304,23 +274,15 @@ net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAnd
 }
 
 net::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
-ReceiveController::OnCancelSend(
-    const http::request<boost::beast::http::vector_body<std::uint8_t>>& req) {
+ReceiveController::OnCancelSend(const http::request<boost::beast::http::string_body>& req) {
     spdlog::debug("ReceiveController::OnCancelSend");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/octet-stream");
-    res.set(http::field::connection, "keep-alive");
+    res.set(http::field::content_type, "application/json");
+    res.keep_alive(req.keep_alive());
 
     try {
-        const auto& binary_data = req.body();
-        MessageType msg_type;
-        json metadata;
-        std::vector<std::uint8_t> unused_data;
-
-        if (!BinaryMessageHelper::Parse(binary_data, msg_type, metadata, unused_data)) {
-            throw std::runtime_error("Failed to parse binary message");
-        }
+        json metadata = json::parse(req.body());
 
         std::string file_id = metadata["file_id"].get<std::string>();
 

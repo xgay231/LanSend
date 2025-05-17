@@ -41,8 +41,17 @@ HttpServer::~HttpServer() {
     spdlog::info("HttpServer destroyed.");
 }
 
-void HttpServer::AddRoute(const std::string& path, http::verb method, RouteHandler handler) {
-    routes_[path] = {method, std::move(handler)};
+void HttpServer::AddRoute(const std::string& path,
+                          http::verb method,
+                          BinaryRequestHandler&& handler) {
+    routes_[path] = {method, RequestType::kBinary, std::move(handler)};
+    spdlog::info(std::format("Added route: {} {}", std::string(http::to_string(method)), path));
+}
+
+void HttpServer::AddRoute(const std::string& path,
+                          boost::beast::http::verb method,
+                          StringRequestHandler&& handler) {
+    routes_[path] = {method, RequestType::kString, std::move(handler)};
     spdlog::info(std::format("Added route: {} {}", std::string(http::to_string(method)), path));
 }
 
@@ -134,7 +143,7 @@ boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<beast::tc
 
                 spdlog::info("Received {} request for {}", req.method_string(), req.target());
 
-                keep_alive = (req[http::field::connection] != "close");
+                keep_alive = req.keep_alive();
 
                 HttpResponse res = co_await handle_request(std::move(req));
 
@@ -220,7 +229,13 @@ boost::asio::awaitable<HttpResponse> HttpServer::handle_request(HttpRequest&& re
     bool request_keep_alive = req.keep_alive();
 
     try {
-        res = co_await route_info.handler(std::move(req));
+        if (route_info.type == RequestType::kString) {
+            auto handler = std::get<StringRequestHandler>(route_info.handler);
+            res = co_await handler(BinaryToStringRequest(req));
+        } else {
+            auto handler = std::get<BinaryRequestHandler>(route_info.handler);
+            res = co_await handler(std::move(req));
+        }
     } catch (const std::exception& e) {
         spdlog::error(std::format("Error executing handler for {}: {}", path, e.what()));
 
@@ -236,6 +251,22 @@ boost::asio::awaitable<HttpResponse> HttpServer::handle_request(HttpRequest&& re
     }
 
     co_return res;
+}
+
+StringRequest HttpServer::BinaryToStringRequest(const BinaryRequest& req) {
+    http::request<http::string_body> string_req;
+    string_req.method(req.method());
+    string_req.target(req.target());
+    string_req.version(req.version());
+
+    for (auto const& field : req)
+        string_req.set(field.name(), field.value());
+
+    std::string body_str(reinterpret_cast<const char*>(req.body().data()), req.body().size());
+    string_req.body() = std::move(body_str);
+    string_req.prepare_payload();
+
+    return string_req;
 }
 
 } // namespace lansend

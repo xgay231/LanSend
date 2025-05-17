@@ -20,10 +20,22 @@ using HttpResponse = boost::beast::http::response<boost::beast::http::string_bod
 // 路由处理器函数类型
 using RouteHandler = std::function<boost::asio::awaitable<HttpResponse>(HttpRequest&&)>;
 
+using StringRequest = boost::beast::http::request<boost::beast::http::string_body>;
+using BinaryRequest = boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>;
+
+using StringRequestHandler = std::function<boost::asio::awaitable<HttpResponse>(StringRequest&&)>;
+using BinaryRequestHandler = std::function<boost::asio::awaitable<HttpResponse>(BinaryRequest&&)>;
+
+enum class RequestType {
+    kString,
+    kBinary,
+};
+
 // 路由信息结构体
 struct RouteInfo {
     boost::beast::http::verb method;
-    RouteHandler handler;
+    RequestType type;
+    std::variant<StringRequestHandler, BinaryRequestHandler> handler;
 };
 
 //HTTPS 服务器类
@@ -36,7 +48,12 @@ public:
     ~HttpServer();
 
     // 添加路由
-    void AddRoute(const std::string& path, boost::beast::http::verb method, RouteHandler handler);
+    void AddRoute(const std::string& path,
+                  boost::beast::http::verb method,
+                  BinaryRequestHandler&& handler);
+    void AddRoute(const std::string& path,
+                  boost::beast::http::verb method,
+                  StringRequestHandler&& handler);
 
     // 启动服务器
     void start(uint16_t port);
@@ -54,6 +71,8 @@ private:
 
     // 处理请求
     boost::asio::awaitable<HttpResponse> handle_request(HttpRequest&& request);
+
+    static StringRequest BinaryToStringRequest(const BinaryRequest& req);
 
     boost::asio::io_context& io_context_;
     boost::asio::ssl::context& ssl_context_;

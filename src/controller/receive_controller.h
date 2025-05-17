@@ -25,18 +25,16 @@ public:
     ~ReceiveController() = default;
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
-    OnPrepareSend(
-        const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req);
+    OnPrepareSend(const boost::beast::http::request<boost::beast::http::string_body>& req);
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>> OnSendChunk(
         const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req);
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
-    OnVerifyAndComplete(
-        const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req);
+    OnVerifyAndComplete(const boost::beast::http::request<boost::beast::http::string_body>& req);
 
-    boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>> OnCancelSend(
-        const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req);
+    boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
+    OnCancelSend(const boost::beast::http::request<boost::beast::http::string_body>& req);
 
     void SetSaveDirectory(const std::filesystem::path& save_dir);
 

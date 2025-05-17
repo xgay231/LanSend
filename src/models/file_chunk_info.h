@@ -12,7 +12,7 @@ struct FileChunkInfo {
     std::string file_checksum;  // 整个文件的校验和
     size_t current_chunk;       // 当前块编号
     std::string chunk_checksum; // 当前块的校验和
-    std::string chunk_data;     // 块数据（Base64编码）
+    std::string chunk_data;     // 块数据
 
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(FileChunkInfo,
                                    file_id,

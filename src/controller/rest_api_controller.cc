@@ -21,11 +21,12 @@ RestApiController::RestApiController(HttpServer& server)
 }
 
 net::awaitable<http::response<http::string_body>> RestApiController::OnPing(
-    const http::request<http::vector_body<std::uint8_t>>& req) {
+    const http::request<http::string_body>& req) {
     spdlog::debug("RestApiController::OnPing");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/json");
+        res.keep_alive(req.keep_alive());
 
     if (req[http::field::connection] == "close") {
         res.set(http::field::connection, "close");
@@ -38,11 +39,12 @@ net::awaitable<http::response<http::string_body>> RestApiController::OnPing(
 }
 
 net::awaitable<http::response<http::string_body>> RestApiController::OnInfo(
-    const http::request<http::vector_body<std::uint8_t>>& req) {
+    const http::request<http::string_body>& req) {
     spdlog::debug("RestApiController::OnInfo");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/json");
+    res.keep_alive(req.keep_alive());
 
     if (req[http::field::connection] == "close") {
         res.set(http::field::connection, "close");

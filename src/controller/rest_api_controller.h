@@ -14,10 +14,10 @@ public:
     ~RestApiController() = default;
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>> OnPing(
-        const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req);
+        const boost::beast::http::request<boost::beast::http::string_body>& req);
 
     boost::asio::awaitable<boost::beast::http::response<boost::beast::http::string_body>> OnInfo(
-        const boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>& req);
+        const boost::beast::http::request<boost::beast::http::string_body>& req);
 
 private:
     void InstallRoutes();

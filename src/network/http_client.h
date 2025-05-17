@@ -1,10 +1,12 @@
 #pragma once
 
+#include "constants/route.hpp"
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
 #include <security/certificate_manager.hpp>
@@ -34,8 +36,7 @@ public:
     unsigned short current_port() const;
 
     template<typename RequestBody>
-    net::awaitable<http::response<http::vector_body<uint8_t>>> SendRequest(
-        http::request<RequestBody>& req);
+    net::awaitable<http::response<http::string_body>> SendRequest(http::request<RequestBody>& req);
 
     template<typename Body>
     http::request<Body> CreateRequest(http::verb method,
@@ -53,7 +54,7 @@ private:
 };
 
 template<typename RequestBody>
-net::awaitable<http::response<http::vector_body<uint8_t>>> HttpsClient::SendRequest(
+net::awaitable<http::response<http::string_body>> HttpsClient::SendRequest(
     http::request<RequestBody>& req) {
     if (!connection_) {
         throw std::runtime_error("No active connection");
@@ -62,7 +63,7 @@ net::awaitable<http::response<http::vector_body<uint8_t>>> HttpsClient::SendRequ
     co_await http::async_write(*connection_, req);
 
     beast::flat_buffer buffer;
-    http::response<http::vector_body<uint8_t>> res;
+    http::response<http::string_body> res;
     co_await http::async_read(*connection_, buffer, res);
 
     co_return res;
@@ -79,13 +80,13 @@ http::request<Body> HttpsClient::CreateRequest(http::verb method,
     }
 
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http::field::content_type, "application/octet-stream");
-
-    if (keepAlive) {
-        req.set(http::field::connection, "keep-alive");
+    if (target == ApiRoute::kSendChunk) {
+        req.set(http::field::content_type, "application/octet-stream");
     } else {
-        req.set(http::field::connection, "close");
+        req.set(http::field::content_type, "application/json");
     }
+
+    req.keep_alive(keepAlive);
 
     return req;
 }

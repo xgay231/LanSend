@@ -1,12 +1,12 @@
 #include "file_sender.h"
-#include "utils/binary_message_helper.h"
+#include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <constants/route.hpp>
 #include <fstream>
-#include <models/message_type.h>
 #include <spdlog/spdlog.h>
+#include <utils/binary_message.h>
 
 namespace net = boost::asio;
 namespace beast = boost::beast;
@@ -174,13 +174,13 @@ boost::asio::awaitable<bool> FileSender::CancelSend(const std::string& file_id) 
         json metadata;
         metadata["file_id"] = file_id;
 
-        std::vector<uint8_t> binary_message = BinaryMessageHelper::Create(MessageType::kFileEnd,
-                                                                          metadata);
+        // std::vector<uint8_t> binary_message = BinaryMessageHelper::Create(MessageType::kFileEnd,
+        //                                                                   metadata);
 
-        auto req = client_.CreateRequest<http::vector_body<uint8_t>>(http::verb::post,
-                                                                     ApiRoute::kCancelSend.data(),
-                                                                     true);
-        req.body() = std::move(binary_message);
+        auto req = client_.CreateRequest<http::string_body>(http::verb::post,
+                                                            ApiRoute::kCancelSend.data(),
+                                                            true);
+        req.body() = metadata.dump();
         req.prepare_payload();
 
         spdlog::info("Sending cancel request for file ID: {}", file_id);
@@ -193,25 +193,15 @@ boost::asio::awaitable<bool> FileSender::CancelSend(const std::string& file_id) 
             co_return false;
         }
 
-        MessageType response_type;
-        json response_metadata;
-        std::vector<uint8_t> response_data;
-
-        if (BinaryMessageHelper::Parse(res.body(), response_type, response_metadata, response_data)) {
-            bool success = response_metadata.value("success", false);
-            if (success) {
-                std::string message = response_metadata.value("message", "");
-                spdlog::info("File transfer cancelled: {}", message);
-
-                // co_await client_.Disconnect();
-
-                co_return true;
-            } else {
-                std::string error = response_metadata.value("error", "Unknown error");
-                spdlog::error("Failed to cancel transfer: {}", error);
-            }
+        json response_data = json::parse(res.body());
+        bool success = response_data.value("success", false);
+        if (success) {
+            std::string message = response_data.value("message", "");
+            spdlog::info("File transfer cancelled: {}", message);
+            co_return true;
         } else {
-            spdlog::error("Invalid response format when cancelling transfer");
+            std::string error = response_data.value("error", "Unknown error");
+            spdlog::error("Failed to cancel transfer: {}", error);
         }
 
         co_return false;
@@ -230,13 +220,10 @@ net::awaitable<std::string> FileSender::PrepareSend(const FileChunkInfo& file_in
 
         json metadata = file_info;
 
-        std::vector<uint8_t> binary_message = BinaryMessageHelper::Create(MessageType::kFileStart,
-                                                                          metadata);
-
-        auto req = client_.CreateRequest<http::vector_body<uint8_t>>(http::verb::post,
-                                                                     ApiRoute::kPrepareSend.data(),
-                                                                     true);
-        req.body() = std::move(binary_message);
+        auto req = client_.CreateRequest<http::string_body>(http::verb::post,
+                                                            ApiRoute::kPrepareSend.data(),
+                                                            true);
+        req.body() = metadata.dump();
         req.prepare_payload();
 
         spdlog::info("Sending prepare request for file transfer");
@@ -275,11 +262,9 @@ net::awaitable<bool> FileSender::SendChunk(FileChunkInfo& chunk_info,
 
         json metadata = chunk_info;
 
-        std::vector<uint8_t> binary_message
-            = BinaryMessageHelper::Create(MessageType::kFileChunk,
-                                          metadata,
-                                          std::vector<uint8_t>(chunk_data.begin(),
-                                                               chunk_data.end()));
+        BinaryMessage binary_message = CreateBinaryMessage(metadata,
+                                                           BinaryData(chunk_data.begin(),
+                                                                      chunk_data.end()));
 
         auto req = client_.CreateRequest<http::vector_body<uint8_t>>(http::verb::post,
                                                                      ApiRoute::kSendChunk.data(),
@@ -322,14 +307,10 @@ net::awaitable<bool> FileSender::VerifyAndComplete(const std::string& file_id) {
         json metadata;
         metadata["file_id"] = file_id;
 
-        std::vector<uint8_t> binary_message = BinaryMessageHelper::Create(MessageType::kFileEnd,
-                                                                          metadata);
-
-        auto req
-            = client_.CreateRequest<http::vector_body<uint8_t>>(http::verb::post,
-                                                                ApiRoute::kVerifyAndComplete.data(),
-                                                                false);
-        req.body() = std::move(binary_message);
+        auto req = client_.CreateRequest<http::string_body>(http::verb::post,
+                                                            ApiRoute::kVerifyAndComplete.data(),
+                                                            false);
+        req.body() = metadata.dump();
         req.prepare_payload();
 
         auto res = co_await client_.SendRequest(req);
