@@ -9,7 +9,7 @@
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
-#include <security/certificate_manager.hpp>
+#include <security/certificate_manager.h>
 #include <string>
 
 namespace beast = boost::beast;
@@ -24,6 +24,9 @@ class HttpsClient {
 public:
     HttpsClient(net::io_context& ioc, CertificateManager& cert_manager);
     ~HttpsClient();
+
+    HttpsClient(const HttpsClient&) = delete;
+    HttpsClient& operator=(const HttpsClient&) = delete;
 
     net::awaitable<bool> Connect(const std::string& host, unsigned short port);
 

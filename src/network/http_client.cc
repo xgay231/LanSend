@@ -9,7 +9,7 @@ HttpsClient::HttpsClient(net::io_context& ioc, CertificateManager& cert_manager)
     , cert_manager_(cert_manager)
     , ssl_ctx_(
           SSLHelper::create_client_context([&](bool preverified, ssl::verify_context& ctx) -> bool {
-              return cert_manager.verify_certificate(preverified, ctx);
+              return cert_manager.VerifyCertificate(preverified, ctx);
           })) {}
 
 HttpsClient::~HttpsClient() {
@@ -25,13 +25,10 @@ net::awaitable<bool> HttpsClient::Connect(const std::string& host, unsigned shor
             co_await Disconnect();
         }
 
-        cert_manager_.set_current_hostname(host);
-
         connection_ = std::make_unique<beast::ssl_stream<beast::tcp_stream>>(beast::tcp_stream(ioc_),
                                                                              ssl_ctx_);
 
         if (!SSLHelper::set_hostname(connection_->native_handle(), host)) {
-            cert_manager_.set_current_hostname("");
             throw std::runtime_error("Failed to set SNI Hostname");
         }
 
@@ -60,7 +57,6 @@ net::awaitable<bool> HttpsClient::Connect(const std::string& host, unsigned shor
         current_host_.clear();
         current_port_ = 0;
 
-        cert_manager_.set_current_hostname("");
         co_return false;
     }
 }
@@ -82,8 +78,6 @@ net::awaitable<bool> HttpsClient::Disconnect() {
         current_host_.clear();
         current_port_ = 0;
 
-        cert_manager_.set_current_hostname("");
-
         spdlog::debug("Disconnected");
         co_return true;
     } catch (const std::exception& e) {
@@ -92,7 +86,6 @@ net::awaitable<bool> HttpsClient::Disconnect() {
         current_host_.clear();
         current_port_ = 0;
 
-        cert_manager_.set_current_hostname("");
         co_return false;
     }
 }

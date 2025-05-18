@@ -1,4 +1,4 @@
-#include "certificate_manager.hpp"
+#include "certificate_manager.h"
 #include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
@@ -22,8 +22,8 @@ CertificateManager::CertificateManager(const fs::path& certDir)
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
 
-    trusted_fingerprints_path_ = certificate_dir_ / "trusted_hosts.json";
-    load_trusted_fingerprints();
+    trusted_fingerprints_path_ = certificate_dir_ / "trusted_fingerprints.json";
+    LoadTrustedFingerprints();
 }
 
 CertificateManager::~CertificateManager() {
@@ -31,17 +31,17 @@ CertificateManager::~CertificateManager() {
     ERR_free_strings();
 }
 
-bool CertificateManager::init_security_context() {
-    if (load_security_context()) {
+bool CertificateManager::InitSecurityContext() {
+    if (LoadSecurityContext()) {
         spdlog::info("Loaded existing certificate with fingerprint: {}",
                      security_context_.certificate_hash);
         return true;
     }
 
-    if (generate_self_signed_certificate()) {
+    if (GenerateSelfSignedCertificate()) {
         spdlog::info("Generated new self-signed certificate with fingerprint: {}",
                      security_context_.certificate_hash);
-        return save_security_context();
+        return SaveSecurityContext();
     }
 
     return false;
@@ -52,7 +52,7 @@ const SecurityContext& CertificateManager::security_context() const {
 }
 
 // Calculate certificate fingerprint using SHA-256
-std::string CertificateManager::calculate_certificate_hash(const std::string& certificatePem) {
+std::string CertificateManager::CalculateCertificateHash(const std::string& certificatePem) {
     unsigned char hash[EVP_MAX_MD_SIZE];
     unsigned int hashLen;
 
@@ -72,23 +72,11 @@ std::string CertificateManager::calculate_certificate_hash(const std::string& ce
     return ss.str();
 }
 
-bool CertificateManager::verify_certificate(bool preverified, ssl::verify_context& ctx) {
+bool CertificateManager::VerifyCertificate(bool preverified, ssl::verify_context& ctx) {
     // Get the certificate being verified
     X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
     if (!cert) {
         spdlog::error("No certificate to verify");
-        return false;
-    }
-
-    // Get the hostname currently being connected to
-    std::string hostname;
-    {
-        std::lock_guard<std::mutex> lock(hostname_mutex_);
-        hostname = current_hostname_;
-    }
-
-    if (hostname.empty()) {
-        spdlog::error("No hostname set for verification");
         return false;
     }
 
@@ -101,61 +89,51 @@ bool CertificateManager::verify_certificate(bool preverified, ssl::verify_contex
     std::string certPem(certBuf, certLen);
 
     // Calculate fingerprint
-    std::string actualFingerprint = calculate_certificate_hash(certPem);
+    std::string actualFingerprint = CalculateCertificateHash(certPem);
 
     BIO_free(certBio);
 
-    // Check if the host already has a trusted fingerprint
-    if (trusted_hosts_.find(hostname) != trusted_hosts_.end()) {
-        // Known host, verify if fingerprint matches
-        std::string expectedFingerprint = trusted_hosts_[hostname];
-
-        if (actualFingerprint == expectedFingerprint) {
-            spdlog::info("Certificate fingerprint verified successfully for {}", hostname);
-            return true;
-        } else {
-            spdlog::error("SECURITY ALERT: Certificate fingerprint mismatch for {}!", hostname);
-            spdlog::error("Expected: {}", expectedFingerprint);
-            spdlog::error("Received: {}", actualFingerprint);
-            spdlog::error("This could indicate a man-in-the-middle attack!");
-
-            // In a real application, a user confirmation mechanism could be provided
-            return false;
-        }
+    // Check if the fingerprint is in our trusted set
+    if (trusted_fingerprints_.find(actualFingerprint) != trusted_fingerprints_.end()) {
+        // Known fingerprint, connection is trusted
+        spdlog::info("Certificate fingerprint verified successfully: {}", actualFingerprint);
+        return true;
     } else {
-        // First connection to this host, record fingerprint
-        spdlog::warn("First connection to {}, saving fingerprint: {}", hostname, actualFingerprint);
-        trusted_hosts_[hostname] = actualFingerprint;
-        save_trusted_fingerprints();
+        // First connection with this fingerprint, prompt user to trust it
+        spdlog::warn("New certificate fingerprint detected: {}", actualFingerprint);
+
+        // In a real application, you might show a prompt to the user here
+        // For this implementation, we'll auto-trust on first encounter
+        trusted_fingerprints_.insert(actualFingerprint);
+        SaveTrustedFingerprints();
+
+        spdlog::info("Automatically trusted new fingerprint: {}", actualFingerprint);
         return true;
     }
 }
 
-void CertificateManager::trust_host(const std::string& hostname, const std::string& fingerprint) {
-    trusted_hosts_[hostname] = fingerprint;
-    save_trusted_fingerprints();
+void CertificateManager::TrustFingerprint(const std::string& fingerprint) {
+    trusted_fingerprints_.insert(fingerprint);
+    SaveTrustedFingerprints();
+    spdlog::info("Added fingerprint to trusted list: {}", fingerprint);
 }
 
-bool CertificateManager::is_host_trusted(const std::string& hostname,
-                                         const std::string& fingerprint) {
-    auto it = trusted_hosts_.find(hostname);
-    if (it != trusted_hosts_.end()) {
-        return it->second == fingerprint;
+bool CertificateManager::IsFingerprintTrusted(const std::string& fingerprint) {
+    return trusted_fingerprints_.find(fingerprint) != trusted_fingerprints_.end();
+}
+
+bool CertificateManager::TrustCertificate(const std::string& certificatePem) {
+    try {
+        std::string fingerprint = CalculateCertificateHash(certificatePem);
+        TrustFingerprint(fingerprint);
+        return true;
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to add certificate to trust list: {}", e.what());
+        return false;
     }
-    return false;
 }
 
-void CertificateManager::set_current_hostname(const std::string& hostname) {
-    std::lock_guard<std::mutex> lock(hostname_mutex_);
-    current_hostname_ = hostname;
-}
-
-std::string CertificateManager::current_hostname() const {
-    std::lock_guard<std::mutex> lock(hostname_mutex_);
-    return current_hostname_;
-}
-
-bool CertificateManager::generate_self_signed_certificate() {
+bool CertificateManager::GenerateSelfSignedCertificate() {
     EVP_PKEY* pkey = nullptr;
     X509* x509 = nullptr;
 
@@ -206,13 +184,7 @@ bool CertificateManager::generate_self_signed_certificate() {
         gethostname(hostname, sizeof(hostname));
 
         X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char*) hostname, -1, -1, 0);
-        X509_NAME_add_entry_by_txt(name,
-                                   "O",
-                                   MBSTRING_ASC,
-                                   (unsigned char*) "P2P File Transfer App",
-                                   -1,
-                                   -1,
-                                   0);
+        X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (unsigned char*) "LanSend", -1, -1, 0);
         X509_NAME_add_entry_by_txt(name,
                                    "OU",
                                    MBSTRING_ASC,
@@ -252,8 +224,13 @@ bool CertificateManager::generate_self_signed_certificate() {
         security_context_.certificate_pem = std::string(certBuf, certLen);
 
         // 4. Calculate certificate fingerprint
-        security_context_.certificate_hash = calculate_certificate_hash(
+        security_context_.certificate_hash = CalculateCertificateHash(
             security_context_.certificate_pem);
+
+        // Add our own fingerprint to trusted list
+        trusted_fingerprints_.insert(security_context_.certificate_hash);
+        SaveTrustedFingerprints();
+
         // Release all resources
         BIO_free(privateBio);
         BIO_free(publicBio);
@@ -275,7 +252,7 @@ bool CertificateManager::generate_self_signed_certificate() {
     }
 }
 
-bool CertificateManager::save_security_context() {
+bool CertificateManager::SaveSecurityContext() {
     try {
         std::ofstream privateKeyFile(certificate_dir_ / "private_key.pem");
         privateKeyFile << security_context_.private_key_pem;
@@ -300,7 +277,7 @@ bool CertificateManager::save_security_context() {
     }
 }
 
-bool CertificateManager::load_security_context() {
+bool CertificateManager::LoadSecurityContext() {
     try {
         if (!fs::exists(certificate_dir_ / "private_key.pem")
             || !fs::exists(certificate_dir_ / "public_key.pem")
@@ -329,6 +306,10 @@ bool CertificateManager::load_security_context() {
         fingerprintStream << fingerprintFile.rdbuf();
         security_context_.certificate_hash = fingerprintStream.str();
 
+        // Make sure our own fingerprint is trusted
+        trusted_fingerprints_.insert(security_context_.certificate_hash);
+        SaveTrustedFingerprints();
+
         return !security_context_.private_key_pem.empty()
                && !security_context_.public_key_pem.empty()
                && !security_context_.certificate_pem.empty()
@@ -339,7 +320,7 @@ bool CertificateManager::load_security_context() {
     }
 }
 
-void CertificateManager::load_trusted_fingerprints() {
+void CertificateManager::LoadTrustedFingerprints() {
     if (!fs::exists(trusted_fingerprints_path_)) {
         spdlog::info("No trusted fingerprints file found, will create on first connection");
         return;
@@ -349,28 +330,30 @@ void CertificateManager::load_trusted_fingerprints() {
         std::ifstream file(trusted_fingerprints_path_);
         json j = json::parse(file);
 
-        for (const auto& [host, fingerprint] : j.items()) {
-            trusted_hosts_[host] = fingerprint.get<std::string>();
+        if (j.is_array()) {
+            for (const auto& fingerprint : j) {
+                trusted_fingerprints_.insert(fingerprint.get<std::string>());
+            }
         }
 
-        spdlog::info("Loaded {} trusted host fingerprints", trusted_hosts_.size());
+        spdlog::info("Loaded {} trusted fingerprints", trusted_fingerprints_.size());
     } catch (const std::exception& e) {
         spdlog::error("Failed to load trusted fingerprints: {}", e.what());
     }
 }
 
-void CertificateManager::save_trusted_fingerprints() {
+void CertificateManager::SaveTrustedFingerprints() {
     try {
-        json j;
-        for (const auto& [host, fingerprint] : trusted_hosts_) {
-            j[host] = fingerprint;
+        json j = json::array();
+        for (const auto& fingerprint : trusted_fingerprints_) {
+            j.push_back(fingerprint);
         }
 
         std::ofstream file(trusted_fingerprints_path_);
         file << j.dump(2);
         file.close();
 
-        spdlog::debug("Saved {} trusted host fingerprints", trusted_hosts_.size());
+        spdlog::debug("Saved {} trusted fingerprints", trusted_fingerprints_.size());
     } catch (const std::exception& e) {
         spdlog::error("Failed to save trusted fingerprints: {}", e.what());
     }
