@@ -28,11 +28,13 @@ public:
     HttpsClient(const HttpsClient&) = delete;
     HttpsClient& operator=(const HttpsClient&) = delete;
 
-    net::awaitable<bool> Connect(const std::string& host, unsigned short port);
+    net::awaitable<bool> Connect(std::string_view host, unsigned short port);
 
     net::awaitable<bool> Disconnect();
 
     bool IsConnected() const;
+
+    std::optional<boost::asio::ip::tcp::endpoint> local_endpoint() const;
 
     std::string current_host() const;
 

@@ -3,6 +3,7 @@
 #include <boost/asio/ssl/context.hpp>
 #include <functional>
 #include <string>
+#include <string_view>
 
 namespace ssl = boost::asio::ssl;
 
@@ -15,7 +16,7 @@ public:
     static ssl::context create_server_context(const std::string& cert_pem,
                                               const std::string& key_pem);
 
-    static bool set_hostname(SSL* ssl, const std::string& hostname);
+    static bool set_hostname(SSL* ssl, std::string_view hostname);
 
     static void enable_session_cache(ssl::context& ctx, const std::string& session_id);
 

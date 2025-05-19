@@ -12,19 +12,19 @@
 
 namespace lansend {
 
-class RestApiController;
-
-using HttpRequest = boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>;
-using HttpResponse = boost::beast::http::response<boost::beast::http::string_body>;
-
-// 路由处理器函数类型
-using RouteHandler = std::function<boost::asio::awaitable<HttpResponse>(HttpRequest&&)>;
+class CommonApiController;
+class ReceiveController;
 
 using StringRequest = boost::beast::http::request<boost::beast::http::string_body>;
 using BinaryRequest = boost::beast::http::request<boost::beast::http::vector_body<std::uint8_t>>;
 
+using HttpResponse = boost::beast::http::response<boost::beast::http::string_body>;
+
 using StringRequestHandler = std::function<boost::asio::awaitable<HttpResponse>(StringRequest&&)>;
 using BinaryRequestHandler = std::function<boost::asio::awaitable<HttpResponse>(BinaryRequest&&)>;
+
+using HttpRequest = BinaryRequest;
+using RouteHandler = BinaryRequestHandler;
 
 enum class RequestType {
     kString,
@@ -61,25 +61,44 @@ public:
     // 停止服务器
     void stop();
 
+    static HttpResponse Ok(unsigned int version, bool keep_alive, std::string_view body = {});
+    static HttpResponse NotFound(unsigned int version,
+                                 bool keep_alive,
+                                 std::string_view error_message = "Not Found");
+    static HttpResponse BadRequest(unsigned int version,
+                                   bool keep_alive,
+                                   std::string_view error_message = "Bad Request");
+    static HttpResponse InternalServerError(
+        unsigned int version,
+        bool keep_alive,
+        std::string_view error_message = "Internal Server Error");
+    static HttpResponse Forbidden(unsigned int version,
+                                  bool keep_alive,
+                                  std::string_view error_message = "Forbidden");
+    static HttpResponse MethodNotAllowed(unsigned int version,
+                                         bool keep_alive,
+                                         std::string_view error_message = "Method Not Allowed");
+
 private:
     // 接受连接
-    boost::asio::awaitable<void> accept_connections();
+    boost::asio::awaitable<void> acceptConnections();
 
     // 处理连接
-    boost::asio::awaitable<void> handle_connection(
+    boost::asio::awaitable<void> handleConnection(
         boost::asio::ssl::stream<boost::beast::tcp_stream> stream);
 
     // 处理请求
-    boost::asio::awaitable<HttpResponse> handle_request(HttpRequest&& request);
+    boost::asio::awaitable<HttpResponse> handleRequest(HttpRequest&& request);
 
-    static StringRequest BinaryToStringRequest(const BinaryRequest& req);
+    static StringRequest binaryToStringRequest(const BinaryRequest& req);
 
     boost::asio::io_context& io_context_;
     boost::asio::ssl::context& ssl_context_;
     boost::asio::ip::tcp::acceptor acceptor_;
     bool running_;
     std::map<std::string, RouteInfo> routes_;
-    std::unique_ptr<RestApiController> controller_;
+    std::unique_ptr<CommonApiController> common_controller_;
+    std::unique_ptr<ReceiveController> receive_controller_;
 };
 
 } // namespace lansend

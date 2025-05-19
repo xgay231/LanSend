@@ -1,9 +1,22 @@
 #include "receive_controller.h"
 #include "constants/route.hpp"
+#include "models/device_info.h"
+#include "models/dto/request_send_dto.h"
+#include "models/dto/request_send_response_dto.h"
+#include "models/dto/send_chunk_dto.h"
+#include "models/dto/verify_integrity_dto.h"
+#include "models/file_type.h"
+#include "network/http_server.hpp"
 #include <boost/beast/http/string_body_fwd.hpp>
+#include <boost/beast/http/vector_body.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <fstream>
-#include <models/message_type.h>
 #include <nlohmann/json.hpp>
+#include <regex>
+#include <spdlog/spdlog.h>
+#include <string>
+#include <unordered_map>
 #include <utils/binary_message.h>
 
 namespace net = boost::asio;
@@ -20,356 +33,510 @@ ReceiveController::ReceiveController(HttpServer& server, const std::filesystem::
     if (!std::filesystem::exists(save_dir_)) {
         std::filesystem::create_directories(save_dir_);
     }
-    InstallRoutes();
-}
-
-net::awaitable<http::response<http::string_body>> ReceiveController::OnPrepareSend(
-    const http::request<http::string_body>& req) {
-    spdlog::debug("ReceiveController::OnPrepareSend");
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/json");
-    res.keep_alive(req.keep_alive());
-
-    try {
-        json metadata = json::parse(req.body());
-
-        FileChunkInfo file_info;
-        nlohmann::from_json(metadata, file_info);
-
-        fs::path temp_file = save_dir_ / (file_info.file_id + ".part");
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            active_transfers_[file_info.file_id] = temp_file;
-            file_metadata_[file_info.file_id] = file_info;
-            received_chunks_[file_info.file_id] = {};
-        }
-
-        json response_metadata;
-        response_metadata["file_id"] = file_info.file_id;
-        response_metadata["success"] = true;
-
-        res.body() = response_metadata.dump();
-
-        spdlog::info("Started receiving file {} ({}), {} chunks expected",
-                     file_info.file_name,
-                     file_info.file_size,
-                     file_info.total_chunks);
-    } catch (const std::exception& e) {
-        spdlog::error("Error processing file start request: {}", e.what());
-
-        json error_metadata;
-        error_metadata["success"] = false;
-        error_metadata["error"] = e.what();
-
-        res.result(http::status::bad_request);
-        res.body() = error_metadata.dump();
-    }
-
-    res.prepare_payload();
-    spdlog::debug("ReceiveController::OnPrepareSend co_return");
-    co_return res;
-}
-
-net::awaitable<http::response<http::string_body>> ReceiveController::OnSendChunk(
-    const http::request<http::vector_body<std::uint8_t>>& req) {
-    spdlog::debug("ReceiveController::OnSendChunk");
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/json");
-    res.keep_alive(req.keep_alive());
-
-    try {
-        const BinaryMessage& binary_data = req.body();
-
-        json metadata;
-        BinaryData chunk_data;
-        if (!ParseBinaryMessage(binary_data, metadata, chunk_data)) {
-            throw std::runtime_error("Failed to parse binary message");
-        }
-
-        FileChunkInfo chunk_info;
-        nlohmann::from_json(metadata, chunk_info);
-
-        std::string actual_checksum = file_hasher_.CalculateDataChecksum(
-            std::string(reinterpret_cast<const char*>(chunk_data.data()), chunk_data.size()));
-
-        if (actual_checksum != chunk_info.chunk_checksum) {
-            throw std::runtime_error("Chunk checksum mismatch");
-        }
-
-        fs::path temp_file;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            if (active_transfers_.find(chunk_info.file_id) == active_transfers_.end()) {
-                throw std::runtime_error("Invalid file_id: " + chunk_info.file_id);
-            }
-
-            temp_file = active_transfers_[chunk_info.file_id];
-
-            // Check if the chunk has already been received
-            auto& received_set = received_chunks_[chunk_info.file_id];
-            if (received_set.find(chunk_info.current_chunk) != received_set.end()) {
-                spdlog::warn("Duplicate chunk received: {}", chunk_info.current_chunk);
-
-                json response_metadata;
-                response_metadata["success"] = true;
-                response_metadata["chunk"] = chunk_info.current_chunk;
-
-                res.body() = response_metadata.dump();
-                res.prepare_payload();
-                co_return res;
-            }
-        }
-
-        std::fstream file(temp_file, std::ios::binary | std::ios::in | std::ios::out);
-        if (!file) {
-            file.open(temp_file, std::ios::binary | std::ios::out);
-            if (!file) {
-                throw std::runtime_error("Failed to create temporary file: " + temp_file.string());
-            }
-        }
-
-        size_t offset = chunk_info.current_chunk * chunk_info.chunk_size;
-        file.seekp(offset, std::ios::beg);
-        file.write(reinterpret_cast<const char*>(chunk_data.data()), chunk_data.size());
-
-        if (!file) {
-            throw std::runtime_error("Failed to write chunk data to file");
-        }
-
-        file.close();
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            // Mark the chunk as received
-            received_chunks_[chunk_info.file_id].insert(chunk_info.current_chunk);
-
-            const FileChunkInfo& file_info = file_metadata_[chunk_info.file_id];
-
-            size_t received_count = received_chunks_[chunk_info.file_id].size();
-            if (received_count % 10 == 0 || received_count == file_info.total_chunks) {
-                spdlog::info("Received chunk {}/{} for file {} ({:.1f}%)",
-                             received_count,
-                             file_info.total_chunks,
-                             file_info.file_name,
-                             100.0 * received_count / file_info.total_chunks);
-            }
-        }
-
-        json response_metadata;
-        response_metadata["success"] = true;
-        response_metadata["chunk"] = chunk_info.current_chunk;
-
-        res.body() = response_metadata.dump();
-    } catch (const std::exception& e) {
-        spdlog::error("Error processing file chunk: {}", e.what());
-
-        json error_metadata;
-        error_metadata["success"] = false;
-        error_metadata["error"] = e.what();
-
-        res.result(http::status::bad_request);
-        res.body() = error_metadata.dump();
-    }
-
-    res.prepare_payload();
-    co_return res;
-}
-
-net::awaitable<http::response<http::string_body>> ReceiveController::OnVerifyAndComplete(
-    const http::request<http::string_body>& req) {
-    spdlog::debug("ReceiveController::OnVerifyAndComplete");
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/json");
-    res.keep_alive(req.keep_alive());
-
-    try {
-        json metadata = json::parse(req.body());
-
-        std::string file_id = metadata["file_id"].get<std::string>();
-
-        FileChunkInfo file_info;
-        fs::path temp_file;
-        bool all_chunks_received = false;
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            if (active_transfers_.find(file_id) == active_transfers_.end()) {
-                throw std::runtime_error("Invalid file_id: " + file_id);
-            }
-
-            temp_file = active_transfers_[file_id];
-            file_info = file_metadata_[file_id];
-
-            // Check if all chunks have been received
-            size_t received_count = received_chunks_[file_id].size();
-            all_chunks_received = (received_count == file_info.total_chunks);
-
-            if (!all_chunks_received) {
-                spdlog::error("Not all chunks received: {}/{}",
-                              received_count,
-                              file_info.total_chunks);
-                throw std::runtime_error("Not all chunks received");
-            }
-        }
-
-        // Verify file checksum
-        std::string actual_checksum = file_hasher_.CalculateFileChecksum(temp_file);
-        if (actual_checksum != file_info.file_checksum) {
-            spdlog::error("File checksum mismatch: {} != {}",
-                          actual_checksum,
-                          file_info.file_checksum);
-            throw std::runtime_error("File checksum mismatch");
-        }
-
-        fs::path final_path = save_dir_ / file_info.file_name;
-
-        // Add suffix if file already exists
-        if (fs::exists(final_path)) {
-            std::string stem = final_path.stem().string();
-            std::string ext = final_path.extension().string();
-            final_path = save_dir_ / (stem + "_" + file_id.substr(0, 8) + ext);
-        }
-
-        fs::rename(temp_file, final_path);
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            active_transfers_.erase(file_id);
-            file_metadata_.erase(file_id);
-            received_chunks_.erase(file_id);
-        }
-
-        spdlog::info("File transfer completed: {}, saved to {}",
-                     file_info.file_name,
-                     final_path.string());
-
-        json response_metadata;
-        response_metadata["success"] = true;
-        response_metadata["file_id"] = file_id;
-        response_metadata["checksum"] = actual_checksum;
-        response_metadata["path"] = final_path.string();
-
-        res.body() = response_metadata.dump();
-    } catch (const std::exception& e) {
-        spdlog::error("Error finalizing file transfer: {}", e.what());
-
-        json error_metadata;
-        error_metadata["success"] = false;
-        error_metadata["error"] = e.what();
-
-        res.result(http::status::bad_request);
-        res.body() = error_metadata.dump();
-    }
-
-    res.prepare_payload();
-    co_return res;
-}
-
-net::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
-ReceiveController::OnCancelSend(const http::request<boost::beast::http::string_body>& req) {
-    spdlog::debug("ReceiveController::OnCancelSend");
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/json");
-    res.keep_alive(req.keep_alive());
-
-    try {
-        json metadata = json::parse(req.body());
-
-        std::string file_id = metadata["file_id"].get<std::string>();
-
-        std::filesystem::path temp_file;
-        bool found = false;
-        std::string file_name;
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            auto it = active_transfers_.find(file_id);
-            if (it != active_transfers_.end()) {
-                temp_file = it->second;
-                found = true;
-
-                if (file_metadata_.find(file_id) != file_metadata_.end()) {
-                    file_name = file_metadata_[file_id].file_name;
-                    spdlog::info("Cancelling transfer for file: {}", file_name);
-                } else {
-                    spdlog::info("Cancelling transfer for file ID: {}", file_id);
-                }
-
-                active_transfers_.erase(it);
-                file_metadata_.erase(file_id);
-                received_chunks_.erase(file_id);
-            }
-        }
-
-        if (found && std::filesystem::exists(temp_file)) {
-            std::error_code ec;
-            std::filesystem::remove(temp_file, ec);
-            if (ec) {
-                spdlog::warn("Failed to delete temporary file: {}, error: {}",
-                             temp_file.string(),
-                             ec.message());
-            } else {
-                spdlog::info("Temporary file deleted: {}", temp_file.string());
-            }
-        }
-
-        json response_metadata;
-        response_metadata["success"] = true;
-        response_metadata["file_id"] = file_id;
-        if (!file_name.empty()) {
-            response_metadata["file_name"] = file_name;
-        }
-        response_metadata["message"] = found ? "Transfer cancelled" : "Transfer not found";
-
-        res.body() = response_metadata.dump();
-    } catch (const std::exception& e) {
-        spdlog::error("Error cancelling file transfer: {}", e.what());
-
-        json error_metadata;
-        error_metadata["success"] = false;
-        error_metadata["error"] = e.what();
-
-        res.result(http::status::bad_request);
-        res.body() = error_metadata.dump();
-    }
-
-    res.prepare_payload();
-    co_return res;
+    installRoutes();
 }
 
 void ReceiveController::SetSaveDirectory(const std::filesystem::path& save_dir) {
-    std::lock_guard<std::mutex> lock(mutex_);
     save_dir_ = save_dir;
     if (!std::filesystem::exists(save_dir_)) {
         std::filesystem::create_directories(save_dir_);
     }
 }
 
-void ReceiveController::InstallRoutes() {
-    server_.AddRoute(ApiRoute::kPrepareSend.data(),
+ReceiveSessionStatus ReceiveController::session_status() const {
+    return session_status_;
+}
+
+std::string_view ReceiveController::sender_ip() const {
+    return sender_ip_;
+}
+
+unsigned short ReceiveController::sender_port() const {
+    return sender_port_;
+}
+
+void ReceiveController::NotifySenderLost() {
+    spdlog::info("Being notified that sender is lost before the session is completed");
+    resetToIdle();
+}
+
+net::awaitable<http::response<http::string_body>> ReceiveController::onRequestSend(
+    const http::request<http::string_body>& req) {
+    spdlog::debug("ReceiveController::OnRequestSend");
+    try {
+        RequestSendDto request_send_dto;
+        // NEW
+        try {
+            json data = json::parse(req.body());
+            nlohmann::from_json(data, request_send_dto);
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing request: {}", e.what());
+            co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
+        }
+
+        models::DeviceInfo device_info = std::move(request_send_dto.device_info);
+        std::vector<FileDto> files = std::move(request_send_dto.files);
+        std::string all_file_names{};
+        for (const auto& file : files) {
+            all_file_names += std::format("{} ({})\n",
+                                          file.file_name,
+                                          FileTypeToString(file.file_type));
+        }
+        spdlog::info("{} {} ({}:{}) wants to send {} files:\n{}",
+                     device_info.hostname,
+                     device_info.operating_system,
+                     device_info.ip_address,
+                     device_info.port,
+                     files.size(),
+                     all_file_names);
+
+        if (session_status_ != ReceiveSessionStatus::kIdle) {
+            spdlog::info("The receiver is busy, automatically reject the request");
+            co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "receiver busy");
+        } else {
+            spdlog::info("The receiver is idle, start handling the request");
+            session_status_ = ReceiveSessionStatus::kReceiving;
+        }
+
+        spdlog::debug("Wait for user confirmation");
+
+        // Wait for user confirmation
+        std::optional<std::vector<FileDto>> accepted_files
+            = co_await waitForUserConfirmation(device_info.device_id, files, 30);
+
+        // Sender might cancel waiting for user confirmation
+        // resetToIdle() was called cocurrently when handling sender's request
+        if (session_status_ != ReceiveSessionStatus::kReceiving) {
+            spdlog::info("Sender cancelled waiting for user confirmation");
+            co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "sender cancelled");
+        }
+
+        spdlog::debug("Wait for user confirmation finished");
+
+        if (accepted_files == std::nullopt) {
+            spdlog::info("Send request is rejected by the receiver");
+            resetToIdle();
+            co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "declined");
+        }
+
+        // Record sender's network information
+        sender_ip_ = device_info.ip_address;
+        sender_port_ = device_info.port;
+
+        // Generate a unique session ID with timestamp
+        boost::uuids::random_generator uuid_gen;
+        std::string timestamp = std::to_string(
+            std::chrono::system_clock::now().time_since_epoch().count());
+        session_id_ = timestamp + boost::uuids::to_string(uuid_gen());
+        spdlog::info("Send request accepted, generate session_id: {}", session_id_);
+
+        // Create a session context and generate file tokens with file-specific information
+        std::unordered_map<std::string, std::string> file_tokens;
+        std::string receive_file_message;
+
+        for (const auto& file : accepted_files.value()) {
+            // Create a targeted token using file attributes
+            std::string file_hash = std::to_string(
+                std::hash<std::string>{}(file.file_name + file.file_id));
+            std::string random_part = boost::uuids::to_string(uuid_gen()).substr(0, 12);
+            std::string file_token = file_hash.substr(0, 8) + random_part;
+            file_tokens[file.file_id] = file_token;
+
+            // Create a temporary file path
+            fs::path temp_file_path = save_dir_ / (file.file_id + ".part");
+
+            // Add file to session context
+            received_files_[file.file_id] = ReceiveFileContext{.file_name = file.file_name,
+                                                               .temp_file_path = temp_file_path,
+                                                               .file_token = file_token,
+                                                               .file_size = file.file_size,
+                                                               .chunk_size = file.chunk_size,
+                                                               .total_chunks = file.total_chunks,
+                                                               .received_chunks = {},
+                                                               .file_checksum = file.file_checksum};
+
+            // Build message about the file
+            receive_file_message += std::format("{} ({} bytes), {} chunks expected\n",
+                                                file.file_name,
+                                                file.file_size,
+                                                file.total_chunks);
+        }
+        spdlog::info("Started receiving {} files:\n{}",
+                     accepted_files.value().size(),
+                     receive_file_message);
+
+        RequestSendResponseDto response_dto;
+        response_dto.session_id = session_id_;
+        response_dto.file_tokens = file_tokens;
+        json response_data = response_dto;
+
+        spdlog::info("Send request accepted, session_id: {}", session_id_);
+        co_return HttpServer::Ok(req.version(), req.keep_alive(), response_data.dump());
+    } catch (const std::exception& e) {
+        spdlog::error("Error processing request: {}", e.what());
+        resetToIdle();
+        co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
+    }
+}
+
+net::awaitable<http::response<http::string_body>> ReceiveController::onSendChunk(
+    const http::request<http::vector_body<std::uint8_t>>& req) {
+    spdlog::debug("ReceiveController::OnSendChunk");
+    // Sender might still send several data when receiver received the cancellation request
+    // and resetToIdle() was called cocurrently
+    // Notify sender to stop the sending coroutine
+    if (session_status_ != ReceiveSessionStatus::kReceiving) {
+        spdlog::info("Chunk data sent when receive session is already cancelled by sender");
+        co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "sender cancelled");
+    }
+
+    // This should be polling the event stream to check the ui operation
+    if (cancel_receive) {
+        spdlog::info("receiver cancelled the session");
+        cancel_receive = false;
+        resetToIdle();
+        co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "receiver cancelled");
+    }
+
+    try {
+        const BinaryMessage& binary_message = req.body();
+
+        SendChunkDto send_chunk_dto;
+        BinaryData chunk_data;
+        try {
+            json metadata;
+            if (!ParseBinaryMessage(binary_message, metadata, chunk_data)) {
+                throw std::runtime_error("Failed to parse binary message");
+            }
+            nlohmann::from_json(metadata, send_chunk_dto);
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing request: {}", e.what());
+            co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
+        }
+
+        // Check if the session ID matches
+        if (send_chunk_dto.session_id != session_id_) {
+            spdlog::error("Session ID mismatch: expected {}, got {}",
+                          session_id_,
+                          send_chunk_dto.session_id);
+            throw std::runtime_error("Session ID mismatch");
+        }
+
+        // Check if file_id is valid
+        if (auto iter = received_files_.find(send_chunk_dto.file_id);
+            iter != received_files_.end()) {
+            auto& file_context = iter->second;
+            // Check if the file token matches
+            if (file_context.file_token == send_chunk_dto.file_token) {
+                // Check if the chunk has already been received
+                if (file_context.received_chunks.contains(send_chunk_dto.current_chunk_index)) {
+                    spdlog::warn("Chunk {} for file_id {} in session_id {} already received",
+                                 send_chunk_dto.current_chunk_index,
+                                 send_chunk_dto.file_id,
+                                 send_chunk_dto.session_id);
+                    co_return HttpServer::Ok(req.version(), req.keep_alive());
+                }
+
+                // All valid, process the chunk
+                auto actual_checksum = file_hasher_.CalculateDataChecksum(chunk_data);
+                if (actual_checksum != send_chunk_dto.chunk_checksum) {
+                    throw std::runtime_error(
+                        std::format("Chunk checksum mismatch for file_id {} in session_id {}",
+                                    send_chunk_dto.file_id,
+                                    send_chunk_dto.session_id));
+                }
+
+                // Create or open the temporary file
+                std::fstream temp_file(file_context.temp_file_path,
+                                       std::ios::binary | std::ios::in | std::ios::out);
+                if (!temp_file) {
+                    temp_file.open(file_context.temp_file_path, std::ios::binary | std::ios::out);
+                    if (!temp_file) {
+                        throw std::runtime_error(
+                            std::format("Failed to create temporary file {} for file {}",
+                                        file_context.temp_file_path.string(),
+                                        file_context.file_name));
+                    }
+                }
+
+                std::size_t offset = send_chunk_dto.current_chunk_index * file_context.chunk_size;
+                temp_file.seekp(offset);
+                temp_file.write(reinterpret_cast<const char*>(chunk_data.data()), chunk_data.size());
+
+                if (!temp_file) {
+                    throw std::runtime_error(
+                        std::format("Failed to write chunk to temporary file {} for file {}",
+                                    file_context.temp_file_path.string(),
+                                    file_context.file_name));
+                }
+
+                temp_file.close();
+
+                // Update the received chunks count
+                file_context.received_chunks.insert(send_chunk_dto.current_chunk_index);
+                co_return HttpServer::Ok(req.version(), req.keep_alive(), "ok");
+            } else {
+                throw std::runtime_error(
+                    std::format("Invalid file token for file_id {} in session_id {}",
+                                send_chunk_dto.file_id,
+                                send_chunk_dto.session_id));
+            }
+        } else {
+            throw std::runtime_error(std::format("Invalid file_id {} in session_id {}",
+                                                 send_chunk_dto.file_id,
+                                                 send_chunk_dto.session_id));
+        }
+
+    } catch (const std::exception& e) {
+        spdlog::error("Error processing chunk: {}", e.what());
+        resetToIdle();
+        co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
+    }
+}
+
+net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyIntegrity(
+    const http::request<http::string_body>& req) {
+    spdlog::debug("ReceiveController::OnVerifyIntegrity");
+
+    if (session_status_ != ReceiveSessionStatus::kReceiving) {
+        spdlog::info("Chunk data sent when receive session is already cancelled by sender");
+        co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "sender cancelled");
+    }
+
+    // This should be polling the event stream to check the ui operation
+    if (cancel_receive) {
+        spdlog::info("receiver cancelled the session");
+        cancel_receive = false;
+        resetToIdle();
+        co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "receiver cancelled");
+    }
+
+    try {
+        VerifyIntegrityDto verify_integrity_dto;
+        try {
+            json data = json::parse(req.body());
+            nlohmann::from_json(data, verify_integrity_dto);
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing request: {}", e.what());
+            co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
+        }
+
+        // Check if the session ID matches
+        if (verify_integrity_dto.session_id != session_id_) {
+            throw std::runtime_error(std::format("Session ID mismatch: expected {}, got {}",
+                                                 session_id_,
+                                                 verify_integrity_dto.session_id));
+        }
+
+        // Check if file_id is valid
+        if (auto iter = received_files_.find(verify_integrity_dto.file_id);
+            iter != received_files_.end()) {
+            auto& file_context = iter->second;
+            // Check if the file token matches
+            if (file_context.file_token == verify_integrity_dto.file_token) {
+                // Check if the file is complete
+                if (file_context.received_chunks.size() != file_context.total_chunks) {
+                    spdlog::error("File {} is not completely received ({} of {} chunks)",
+                                  file_context.file_name,
+                                  file_context.received_chunks.size(),
+                                  file_context.total_chunks);
+                    throw std::runtime_error(
+                        std::format("File {} is not completely received ({} of {} chunks)",
+                                    file_context.file_name,
+                                    file_context.received_chunks,
+                                    file_context.total_chunks));
+                }
+                // Verify the file checksum
+                auto actual_checksum = file_hasher_.CalculateFileChecksum(
+                    file_context.temp_file_path);
+                if (actual_checksum != file_context.file_checksum) {
+                    spdlog::debug("File checksum: {}, actual checksum: {}",
+                                  file_context.file_checksum,
+                                  actual_checksum);
+                    throw std::runtime_error(
+                        std::format("File checksum mismatch for file {} (id = {}) in session_id {}",
+                                    file_context.file_name,
+                                    verify_integrity_dto.file_id,
+                                    verify_integrity_dto.session_id));
+                }
+
+                fs::path final_file_path = save_dir_ / file_context.file_name;
+                // Add suffix if the file already exists
+                if (fs::exists(final_file_path)) {
+                    std::string stem = final_file_path.stem().string();
+                    std::string ext = final_file_path.extension().string();
+                    int counter = 1;
+
+                    // Check if the filename already has the format "name (n)"
+                    std::regex pattern(R"((.*) \((\d+)\)$)");
+                    std::smatch matches;
+
+                    if (std::regex_match(stem, matches, pattern)) {
+                        // If it matches "name (n)" format, extract the base name and number
+                        stem = matches[1].str();
+                        counter = std::stoi(matches[2].str()) + 1;
+                    }
+
+                    // Try new filenames with increasing counter
+                    do {
+                        std::string new_stem = stem + " (" + std::to_string(counter) + ")";
+                        final_file_path = save_dir_ / (new_stem + ext);
+                        ++counter;
+                    } while (fs::exists(final_file_path));
+                }
+
+                fs::rename(file_context.temp_file_path, final_file_path);
+
+                spdlog::info("File {} received successfully, saved as \"{}\"",
+                             file_context.file_name,
+                             final_file_path.string());
+
+                completed_count_++;
+
+                // Check if all files in the session are completed
+                checkSessionCompletion();
+
+                co_return HttpServer::Ok(req.version(), req.keep_alive(), "ok");
+            } else {
+                throw std::runtime_error(
+                    std::format("Invalid file token for file_id {} in session_id {}",
+                                verify_integrity_dto.file_id,
+                                verify_integrity_dto.session_id));
+            }
+        } else {
+            throw std::runtime_error(std::format("Invalid file_id {} in session_id {}",
+                                                 verify_integrity_dto.file_id,
+                                                 verify_integrity_dto.session_id));
+        }
+
+    } catch (const std::exception& e) {
+        spdlog::error("Error processing file integrity verification: {}", e.what());
+        session_status_ = ReceiveSessionStatus::kIdle;
+        co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
+    }
+}
+
+net::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
+ReceiveController::onCancelSend(const http::request<boost::beast::http::string_body>& req) {
+    spdlog::debug("ReceiveController::OnCancelSend");
+    if (session_status_ != ReceiveSessionStatus::kReceiving) {
+        spdlog::info(
+            "cancel send request sent when receive session is already cancelled by sender");
+        co_return HttpServer::Ok(req.version(), req.keep_alive(), "Not receiving");
+    }
+
+    try {
+        std::string session_id;
+        try {
+            json data = json::parse(req.body());
+            session_id = data["session_id"].get<std::string>();
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing request: {}", e.what());
+            // NEW
+            co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
+        }
+
+        if (session_id == session_id_) {
+            // Cancel the session
+            resetToIdle();
+
+            spdlog::info("Session {} is cancelled by the sender", session_id);
+
+            co_return HttpServer::Ok(req.version(), req.keep_alive());
+        } else {
+            throw std::runtime_error("Invalid session ID: " + session_id);
+        }
+    } catch (const std::exception& e) {
+        spdlog::error("Error processing cancel request: {}", e.what());
+        co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
+    }
+}
+
+boost::asio::awaitable<std::optional<std::vector<FileDto>>> ReceiveController::waitForUserConfirmation(
+    std::string device_id, const std::vector<FileDto>& files, int timeout_seconds) {
+    // TODO: Implement the logic to wait for user confirmation
+    // This is a placeholder implementation that always accepts all files
+
+    std::optional<std::vector<FileDto>> result = std::nullopt;
+
+    bool confirmed = true;
+    bool timeout = false;
+    auto confirmation_task = [&]() -> net::awaitable<void> {
+        // Simulate waiting for user confirmation
+        int total_milliseconds = 0;
+        while (session_status_ == ReceiveSessionStatus::kReceiving) {
+            if (confirmed) {
+                result = files;
+                co_return;
+            }
+            auto timer = net::steady_timer(co_await net::this_coro::executor,
+                                           std::chrono::milliseconds(50));
+            co_await timer.async_wait(net::use_awaitable);
+            total_milliseconds += 50;
+            if (total_milliseconds >= timeout_seconds * 1000) {
+                timeout = true;
+                co_return;
+            }
+        }
+    };
+
+    try {
+        co_await confirmation_task();
+    } catch (const std::exception& e) {
+        spdlog::error("Error waiting for user confirmation: {}", e.what());
+    }
+
+    co_return result;
+}
+
+void ReceiveController::installRoutes() {
+    server_.AddRoute(ApiRoute::kRequestSend.data(),
                      http::verb::post,
-                     std::bind(&ReceiveController::OnPrepareSend, this, std::placeholders::_1));
+                     std::bind(&ReceiveController::onRequestSend, this, std::placeholders::_1));
     server_.AddRoute(ApiRoute::kSendChunk.data(),
                      http::verb::post,
-                     std::bind(&ReceiveController::OnSendChunk, this, std::placeholders::_1));
-    server_.AddRoute(ApiRoute::kVerifyAndComplete.data(),
+                     std::bind(&ReceiveController::onSendChunk, this, std::placeholders::_1));
+    server_.AddRoute(ApiRoute::kVerifyIntegrity.data(),
                      http::verb::post,
-                     std::bind(&ReceiveController::OnVerifyAndComplete,
-                               this,
-                               std::placeholders::_1));
+                     std::bind(&ReceiveController::onVerifyIntegrity, this, std::placeholders::_1));
     server_.AddRoute(ApiRoute::kCancelSend.data(),
                      http::verb::post,
-                     std::bind(&ReceiveController::OnCancelSend, this, std::placeholders::_1));
+                     std::bind(&ReceiveController::onCancelSend, this, std::placeholders::_1));
+}
+
+void ReceiveController::doCleanup() {
+    if (session_id_.empty() || received_files_.empty()) {
+        return;
+    }
+    for (const auto& [file_id, file_context] : received_files_) {
+        if (fs::exists(file_context.temp_file_path)) {
+            spdlog::info("Cleaning up unfinished temp file of \"{}\"", file_context.file_name);
+            fs::remove(file_context.temp_file_path);
+
+            // Since the files are sent in order, we can assume that the last file is the one
+            // that was being sent when the session was cancelled
+            break;
+        }
+    }
+}
+
+void ReceiveController::checkSessionCompletion() {
+    if (!session_id_.empty()) {
+        if (!received_files_.empty() && completed_count_ == received_files_.size()) {
+            spdlog::info("All files in session {} have been received successfully.", session_id_);
+            resetToIdle();
+        } else {
+            spdlog::info("Session {} is still in progress.", session_id_);
+        }
+    }
+}
+
+void ReceiveController::resetToIdle() {
+    doCleanup();
+    session_id_.clear();
+    session_status_ = ReceiveSessionStatus::kIdle;
+    received_files_.clear();
+    completed_count_ = 0;
 }
 
 } // namespace lansend

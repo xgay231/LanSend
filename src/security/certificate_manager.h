@@ -27,15 +27,15 @@ public:
     bool TrustCertificate(const std::string& certificatePem);
 
 private:
-    bool GenerateSelfSignedCertificate();
+    bool generateSelfSignedCertificate();
 
-    bool SaveSecurityContext();
+    bool saveSecurityContext();
 
-    bool LoadSecurityContext();
+    bool loadSecurityContext();
 
-    void LoadTrustedFingerprints();
+    void loadTrustedFingerprints();
 
-    void SaveTrustedFingerprints();
+    void saveTrustedFingerprints();
 
     SecurityContext security_context_;
     std::filesystem::path certificate_dir_;

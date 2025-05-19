@@ -3,6 +3,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <openssl/ssl.h>
 #include <spdlog/spdlog.h>
+#include <string_view>
 
 ssl::context SSLHelper::create_client_context(VerifyCallback verify_callback) {
     ssl::context ctx(ssl::context::tlsv12_client);
@@ -38,11 +39,11 @@ ssl::context SSLHelper::create_server_context(const std::string& cert_pem,
     return ctx;
 }
 
-bool SSLHelper::set_hostname(SSL* ssl, const std::string& hostname) {
+bool SSLHelper::set_hostname(SSL* ssl, std::string_view hostname) {
     if (!ssl)
         return false;
 
-    if (!SSL_set_tlsext_host_name(ssl, hostname.c_str())) {
+    if (!SSL_set_tlsext_host_name(ssl, hostname.data())) {
         return false;
     }
 

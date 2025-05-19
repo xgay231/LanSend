@@ -1,9 +1,11 @@
 
 #include "http_server.hpp"
-#include "controller/rest_api_controller.h"
+#include "controller/common_api_controller.h"
+#include "controller/receive_controller.h"
 #include "spdlog/spdlog.h"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -30,7 +32,8 @@ HttpServer::HttpServer(net::io_context& io_context, ssl::context& ssl_context)
     , ssl_context_(ssl_context)
     , acceptor_(io_context)
     , running_(false) {
-    controller_ = std::make_unique<RestApiController>(*this);
+    common_controller_ = std::make_unique<CommonApiController>(*this);
+    receive_controller_ = std::make_unique<ReceiveController>(*this);
     spdlog::info("HttpServer created.");
 }
 
@@ -70,7 +73,7 @@ void HttpServer::start(uint16_t port) {
         running_ = true;
         spdlog::info(std::format("HTTPS Server started on port {}", port));
 
-        net::co_spawn(io_context_, accept_connections(), net::detached);
+        net::co_spawn(io_context_, acceptConnections(), net::detached);
 
     } catch (const std::exception& e) {
         spdlog::error(std::format("Failed to start server on port {}: {}", port, e.what()));
@@ -93,7 +96,71 @@ void HttpServer::stop() {
     spdlog::info("HTTPS Server stopped.");
 }
 
-boost::asio::awaitable<void> HttpServer::accept_connections() {
+HttpResponse HttpServer::Ok(unsigned int version, bool keep_alive, std::string_view body) {
+    HttpResponse res{http::status::ok, version};
+    res.keep_alive(keep_alive);
+    res.set(http::field::content_type, "application/json");
+    res.body() = body;
+    res.prepare_payload();
+    return res;
+}
+
+HttpResponse HttpServer::NotFound(unsigned int version,
+                                  bool keep_alive,
+                                  std::string_view error_message) {
+    HttpResponse res{http::status::not_found, version};
+    res.keep_alive(keep_alive);
+    res.set(http::field::content_type, "text/plain");
+    res.body() = error_message;
+    res.prepare_payload();
+    return res;
+}
+
+HttpResponse HttpServer::BadRequest(unsigned int version,
+                                    bool keep_alive,
+                                    std::string_view error_message) {
+    HttpResponse res{http::status::bad_request, version};
+    res.keep_alive(keep_alive);
+    res.set(http::field::content_type, "text/plain");
+    res.body() = error_message;
+    res.prepare_payload();
+    return res;
+}
+
+HttpResponse HttpServer::InternalServerError(unsigned int version,
+                                             bool keep_alive,
+                                             std::string_view error_message) {
+    HttpResponse res{http::status::internal_server_error, version};
+    res.keep_alive(keep_alive);
+    res.set(http::field::content_type, "text/plain");
+    res.body() = error_message;
+    res.prepare_payload();
+    return res;
+}
+
+HttpResponse HttpServer::Forbidden(unsigned int version,
+                                   bool keep_alive,
+                                   std::string_view error_message) {
+    HttpResponse res{http::status::forbidden, version};
+    res.keep_alive(keep_alive);
+    res.set(http::field::content_type, "text/plain");
+    res.body() = error_message;
+    res.prepare_payload();
+    return res;
+}
+
+HttpResponse HttpServer::MethodNotAllowed(unsigned int version,
+                                          bool keep_alive,
+                                          std::string_view error_message) {
+    HttpResponse res{http::status::method_not_allowed, version};
+    res.keep_alive(keep_alive);
+    res.set(http::field::content_type, "text/plain");
+    res.body() = error_message;
+    res.prepare_payload();
+    return res;
+}
+
+boost::asio::awaitable<void> HttpServer::acceptConnections() {
     while (running_) {
         try {
             tcp::socket socket = co_await acceptor_.async_accept();
@@ -103,7 +170,7 @@ boost::asio::awaitable<void> HttpServer::accept_connections() {
             beast::ssl_stream<beast::tcp_stream> stream(beast::tcp_stream(std::move(socket)),
                                                         ssl_context_);
 
-            net::co_spawn(io_context_, handle_connection(std::move(stream)), net::detached);
+            net::co_spawn(io_context_, handleConnection(std::move(stream)), net::detached);
         } catch (const boost::system::system_error& e) {
             if (e.code() == net::error::operation_aborted) {
                 spdlog::info("Accept operation cancelled.");
@@ -118,11 +185,12 @@ boost::asio::awaitable<void> HttpServer::accept_connections() {
     spdlog::info("Stopped accepting connections.");
 }
 
-boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<beast::tcp_stream> stream) {
+boost::asio::awaitable<void> HttpServer::handleConnection(ssl::stream<beast::tcp_stream> stream) {
     try {
         auto& socket = stream.next_layer().socket();
         auto endpoint = socket.remote_endpoint();
-        spdlog::info("New connection from: {}:{}", endpoint.address().to_string(), endpoint.port());
+        auto endpoint_ip_str = endpoint.address().to_string();
+        spdlog::info("New connection from: {}:{}", endpoint_ip_str, endpoint.port());
 
         co_await stream.async_handshake(ssl::stream_base::server, net::use_awaitable);
         spdlog::debug("SSL handshake completed successfully");
@@ -145,7 +213,7 @@ boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<beast::tc
 
                 keep_alive = req.keep_alive();
 
-                HttpResponse res = co_await handle_request(std::move(req));
+                HttpResponse res = co_await handleRequest(std::move(req));
 
                 co_await http::async_write(stream, res);
 
@@ -154,6 +222,17 @@ boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<beast::tc
                     break;
                 }
             } catch (const boost::system::system_error& e) {
+                // Notify the receiver if the sender is lost
+                if (receive_controller_->session_status() == ReceiveSessionStatus::kReceiving) {
+                    if (receive_controller_->sender_ip() == endpoint_ip_str
+                        && receive_controller_->sender_port() == endpoint.port()) {
+                        spdlog::error("Lost connection to sender {}:{} while receiving file",
+                                      endpoint_ip_str,
+                                      endpoint.port());
+                        receive_controller_->NotifySenderLost();
+                    }
+                }
+
                 if (e.code() == boost::beast::error::timeout || e.code() == boost::asio::error::eof
                     || e.code() == boost::asio::error::operation_aborted
                     || e.code() == boost::beast::http::error::end_of_stream) {
@@ -183,29 +262,13 @@ boost::asio::awaitable<void> HttpServer::handle_connection(ssl::stream<beast::tc
     spdlog::info("Connection handling finished.");
 }
 
-boost::asio::awaitable<HttpResponse> HttpServer::handle_request(HttpRequest&& req) {
-    HttpResponse res;
-    res.version(req.version());
-    res.keep_alive(req.keep_alive());
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "application/json");
-
+boost::asio::awaitable<HttpResponse> HttpServer::handleRequest(HttpRequest&& req) {
     std::string path(req.target());
     auto it = routes_.find(path);
 
     if (it == routes_.end()) {
         spdlog::warn(std::format("Route not found: {}", path));
-        http::response<http::string_body> not_found_response;
-        not_found_response.version(req.version());
-        not_found_response.keep_alive(req.keep_alive());
-        not_found_response.result(http::status::not_found);
-        not_found_response.set(http::field::content_type, "application/json");
-        not_found_response.body() = "{\"error\": \"Not Found\"}";
-        not_found_response.prepare_payload();
-
-        res = std::move(not_found_response);
-
-        co_return res;
+        co_return NotFound(req.version(), req.keep_alive());
     }
 
     const auto& route_info = it->second;
@@ -214,46 +277,29 @@ boost::asio::awaitable<HttpResponse> HttpServer::handle_request(HttpRequest&& re
                                  path,
                                  std::string(http::to_string(req.method())),
                                  std::string(http::to_string(route_info.method))));
-        http::response<http::string_body> error_res{http::status::method_not_allowed, req.version()};
-        error_res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-        error_res.set(http::field::content_type, "application/json");
-        error_res.set(http::field::allow, std::string(http::to_string(route_info.method)));
-        error_res.keep_alive(req.keep_alive());
-        error_res.body() = R"({\"error\": \"Method Not Allowed\"})";
-        error_res.prepare_payload();
-        res = std::move(error_res);
-        co_return res;
+        co_return MethodNotAllowed(req.version(), req.keep_alive());
     }
 
     auto request_version = req.version();
     bool request_keep_alive = req.keep_alive();
 
     try {
+        HttpResponse res;
         if (route_info.type == RequestType::kString) {
             auto handler = std::get<StringRequestHandler>(route_info.handler);
-            res = co_await handler(BinaryToStringRequest(req));
+            res = co_await handler(binaryToStringRequest(req));
         } else {
             auto handler = std::get<BinaryRequestHandler>(route_info.handler);
             res = co_await handler(std::move(req));
         }
+        co_return res;
     } catch (const std::exception& e) {
         spdlog::error(std::format("Error executing handler for {}: {}", path, e.what()));
-
-        http::response<http::string_body> error_res{http::status::internal_server_error,
-                                                    request_version};
-        error_res.keep_alive(request_keep_alive);
-        error_res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-        error_res.set(http::field::content_type, "application/json");
-        error_res.body() = R"({\"error\": \"Internal Server Error\"})";
-        error_res.prepare_payload();
-
-        res = std::move(error_res);
+        co_return InternalServerError(request_version, request_keep_alive, e.what());
     }
-
-    co_return res;
 }
 
-StringRequest HttpServer::BinaryToStringRequest(const BinaryRequest& req) {
+StringRequest HttpServer::binaryToStringRequest(const BinaryRequest& req) {
     http::request<http::string_body> string_req;
     string_req.method(req.method());
     string_req.target(req.target());

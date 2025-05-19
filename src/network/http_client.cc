@@ -19,7 +19,7 @@ HttpsClient::~HttpsClient() {
     }
 }
 
-net::awaitable<bool> HttpsClient::Connect(const std::string& host, unsigned short port) {
+net::awaitable<bool> HttpsClient::Connect(std::string_view host, unsigned short port) {
     try {
         if (connection_) {
             co_await Disconnect();
@@ -100,6 +100,19 @@ std::string HttpsClient::current_host() const {
 
 unsigned short HttpsClient::current_port() const {
     return current_port_;
+}
+
+std::optional<boost::asio::ip::tcp::endpoint> HttpsClient::local_endpoint() const {
+    if (!connection_) {
+        return std::nullopt;
+    }
+
+    try {
+        return beast::get_lowest_layer(*connection_).socket().local_endpoint();
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to get connection endpoint: {}", e.what());
+        return std::nullopt;
+    }
 }
 
 } // namespace lansend

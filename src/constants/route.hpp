@@ -8,10 +8,10 @@ class ApiRoute {
 public:
     static constexpr std::string_view kPing = "/ping";
     static constexpr std::string_view kInfo = "/info";
-    static constexpr std::string_view kSendRequest = "/send-request";
-    static constexpr std::string_view kPrepareSend = "/prepare-send";
+    static constexpr std::string_view kConnect = "/connect";
+    static constexpr std::string_view kRequestSend = "/request-send";
     static constexpr std::string_view kSendChunk = "/send-chunk";
-    static constexpr std::string_view kVerifyAndComplete = "/verify-and-complete";
+    static constexpr std::string_view kVerifyIntegrity = "/verify-integrity";
     static constexpr std::string_view kCancelSend = "/cancel-send";
 };
 

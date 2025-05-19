@@ -23,7 +23,7 @@ CertificateManager::CertificateManager(const fs::path& certDir)
     ERR_load_crypto_strings();
 
     trusted_fingerprints_path_ = certificate_dir_ / "trusted_fingerprints.json";
-    LoadTrustedFingerprints();
+    loadTrustedFingerprints();
 }
 
 CertificateManager::~CertificateManager() {
@@ -32,16 +32,16 @@ CertificateManager::~CertificateManager() {
 }
 
 bool CertificateManager::InitSecurityContext() {
-    if (LoadSecurityContext()) {
+    if (loadSecurityContext()) {
         spdlog::info("Loaded existing certificate with fingerprint: {}",
                      security_context_.certificate_hash);
         return true;
     }
 
-    if (GenerateSelfSignedCertificate()) {
+    if (generateSelfSignedCertificate()) {
         spdlog::info("Generated new self-signed certificate with fingerprint: {}",
                      security_context_.certificate_hash);
-        return SaveSecurityContext();
+        return saveSecurityContext();
     }
 
     return false;
@@ -105,7 +105,7 @@ bool CertificateManager::VerifyCertificate(bool preverified, ssl::verify_context
         // In a real application, you might show a prompt to the user here
         // For this implementation, we'll auto-trust on first encounter
         trusted_fingerprints_.insert(actualFingerprint);
-        SaveTrustedFingerprints();
+        saveTrustedFingerprints();
 
         spdlog::info("Automatically trusted new fingerprint: {}", actualFingerprint);
         return true;
@@ -114,7 +114,7 @@ bool CertificateManager::VerifyCertificate(bool preverified, ssl::verify_context
 
 void CertificateManager::TrustFingerprint(const std::string& fingerprint) {
     trusted_fingerprints_.insert(fingerprint);
-    SaveTrustedFingerprints();
+    saveTrustedFingerprints();
     spdlog::info("Added fingerprint to trusted list: {}", fingerprint);
 }
 
@@ -133,7 +133,7 @@ bool CertificateManager::TrustCertificate(const std::string& certificatePem) {
     }
 }
 
-bool CertificateManager::GenerateSelfSignedCertificate() {
+bool CertificateManager::generateSelfSignedCertificate() {
     EVP_PKEY* pkey = nullptr;
     X509* x509 = nullptr;
 
@@ -229,7 +229,7 @@ bool CertificateManager::GenerateSelfSignedCertificate() {
 
         // Add our own fingerprint to trusted list
         trusted_fingerprints_.insert(security_context_.certificate_hash);
-        SaveTrustedFingerprints();
+        saveTrustedFingerprints();
 
         // Release all resources
         BIO_free(privateBio);
@@ -252,7 +252,7 @@ bool CertificateManager::GenerateSelfSignedCertificate() {
     }
 }
 
-bool CertificateManager::SaveSecurityContext() {
+bool CertificateManager::saveSecurityContext() {
     try {
         std::ofstream privateKeyFile(certificate_dir_ / "private_key.pem");
         privateKeyFile << security_context_.private_key_pem;
@@ -277,7 +277,7 @@ bool CertificateManager::SaveSecurityContext() {
     }
 }
 
-bool CertificateManager::LoadSecurityContext() {
+bool CertificateManager::loadSecurityContext() {
     try {
         if (!fs::exists(certificate_dir_ / "private_key.pem")
             || !fs::exists(certificate_dir_ / "public_key.pem")
@@ -308,7 +308,7 @@ bool CertificateManager::LoadSecurityContext() {
 
         // Make sure our own fingerprint is trusted
         trusted_fingerprints_.insert(security_context_.certificate_hash);
-        SaveTrustedFingerprints();
+        saveTrustedFingerprints();
 
         return !security_context_.private_key_pem.empty()
                && !security_context_.public_key_pem.empty()
@@ -320,7 +320,7 @@ bool CertificateManager::LoadSecurityContext() {
     }
 }
 
-void CertificateManager::LoadTrustedFingerprints() {
+void CertificateManager::loadTrustedFingerprints() {
     if (!fs::exists(trusted_fingerprints_path_)) {
         spdlog::info("No trusted fingerprints file found, will create on first connection");
         return;
@@ -342,7 +342,7 @@ void CertificateManager::LoadTrustedFingerprints() {
     }
 }
 
-void CertificateManager::SaveTrustedFingerprints() {
+void CertificateManager::saveTrustedFingerprints() {
     try {
         json j = json::array();
         for (const auto& fingerprint : trusted_fingerprints_) {

@@ -7,6 +7,7 @@ file(GLOB_RECURSE CXX_SOURCE
     src/*.cpp
     src/*.h
     src/*.hpp
+    src/*.cc
 )
 
 set(CMAKE_CXX_STANDARD 23)
@@ -20,7 +21,7 @@ endif()
 
 # find vcpkg-installed
 find_package(spdlog REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system url filesystem asio beast uuid)
+find_package(Boost REQUIRED COMPONENTS system url filesystem asio beast uuid program_options)
 find_package(OpenSSL 3.3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -61,6 +62,7 @@ target_link_libraries(lansend
         Boost::asio
         Boost::beast
         Boost::uuid
+        Boost::program_options
         OpenSSL::Crypto
         OpenSSL::SSL
         nlohmann_json::nlohmann_json

@@ -19,12 +19,18 @@ struct DeviceInfo {
     static auto& LocalDeviceInfo() {
         static DeviceInfo local_device_info = []() {
             DeviceInfo info;
-            info.device_id = settings.device_id;
             info.alias = settings.alias;
             info.hostname = system::Hostname();
             info.operating_system = system::OperatingSystem();
             info.ip_address = "127.0.0.1";
             info.port = settings.port;
+
+            // Generate a unique device ID using hash of hostname and OS and timestamp
+            auto hash = std::hash<std::string>{}(
+                info.hostname + info.operating_system
+                + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()));
+            info.device_id = std::to_string(hash);
+
             return info;
         }();
         if (local_device_info.alias != settings.alias) {

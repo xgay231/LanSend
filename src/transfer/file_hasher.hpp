@@ -1,10 +1,13 @@
 #pragma once
 
+#include "utils/binary_message.h"
 #include <filesystem>
 #include <memory>
 #include <openssl/evp.h>
 #include <spdlog/spdlog.h>
 #include <string>
+
+namespace lansend {
 
 class FileHasher {
 public:
@@ -12,7 +15,7 @@ public:
     ~FileHasher() = default;
 
     std::string CalculateFileChecksum(const std::filesystem::path& file_path);
-    std::string CalculateDataChecksum(const std::string& data);
+    std::string CalculateDataChecksum(const lansend::BinaryData& data);
 
 private:
     struct SHA256HashContext {
@@ -44,3 +47,5 @@ private:
     };
     std::unique_ptr<SHA256HashContext> sha256_hash_context_;
 };
+
+} // namespace lansend

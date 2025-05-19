@@ -1,10 +1,13 @@
 // src/transfer/file_hasher.cpp
 #include "file_hasher.hpp"
+#include "utils/binary_message.h"
 #include <fstream>
 #include <iomanip>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <sstream>
+
+namespace lansend {
 
 FileHasher::FileHasher()
     : sha256_hash_context_(std::make_unique<SHA256HashContext>()) {
@@ -51,7 +54,7 @@ std::string FileHasher::CalculateFileChecksum(const std::filesystem::path& file_
     return ss.str();
 }
 
-std::string FileHasher::CalculateDataChecksum(const std::string& data) {
+std::string FileHasher::CalculateDataChecksum(const lansend::BinaryData& data) {
     if (!sha256_hash_context_ || !sha256_hash_context_->md_ctx_) {
         spdlog::error("FileHasher: OpenSSL context not available for sync calculation (nullptr or "
                       "md_ctx_ is null).");
@@ -73,3 +76,5 @@ std::string FileHasher::CalculateDataChecksum(const std::string& data) {
 
     return ss.str();
 }
+
+} // namespace lansend
