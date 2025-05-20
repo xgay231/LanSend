@@ -1,7 +1,6 @@
-#include <ostream>
-#include <print>
+#include <iostream>
 
 int main(int argc, char* argv[]) {
-    std::println("LanSend IPC Backend");
+    std::cout << "LanSend Backend running...\n";
     return 0;
 }

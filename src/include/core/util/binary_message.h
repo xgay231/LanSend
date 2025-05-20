@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio.hpp>
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>

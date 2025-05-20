@@ -338,7 +338,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyInt
                     throw std::runtime_error(
                         std::format("File {} is not completely received ({} of {} chunks)",
                                     file_context.file_name,
-                                    file_context.received_chunks,
+                                    file_context.received_chunks.size(),
                                     file_context.total_chunks));
                 }
                 // Verify the file checksum

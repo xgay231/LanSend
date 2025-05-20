@@ -1,5 +1,4 @@
 #include <cli/cli_manager.h>
-#include <core/util/logger.h>
 #include <filesystem>
 #include <sstream>
 

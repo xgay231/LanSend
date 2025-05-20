@@ -1,4 +1,3 @@
-#include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -48,7 +47,9 @@ boost::asio::awaitable<bool> SendSession::cancelSend() {
         auto res = co_await client_.SendRequest(req);
 
         if (res.result() != http::status::ok) {
-            spdlog::error("Failed to cancel send: {}:{}", res.reason(), res.body());
+            spdlog::error("Failed to cancel send: {}:{}",
+                          std::string_view(res.reason()),
+                          res.body());
             co_return false;
         }
 
@@ -233,7 +234,8 @@ net::awaitable<bool> SendSession::requestSend(const RequestSendDto& send_request
                 }
                 co_return false;
             } else {
-                throw std::runtime_error(std::format("{}:{}", res.reason(), res.body()));
+                throw std::runtime_error(
+                    std::format("{}:{}", std::string_view(res.reason()), res.body()));
             }
         }
 
@@ -401,7 +403,8 @@ net::awaitable<bool> SendSession::sendChunk(const SendChunkDto& send_chunk_dto,
             session_status_ = SessionStatus::kCancelledByReceiver;
             co_return false;
         } else {
-            throw std::runtime_error(std::format("{}:{}", res.reason(), res.body()));
+            throw std::runtime_error(
+                std::format("{}:{}", std::string_view(res.reason()), res.body()));
         }
     } catch (const std::exception& e) {
         if (session_status_ == SessionStatus::kCancelledBySender
@@ -443,7 +446,8 @@ net::awaitable<bool> SendSession::verifyIntegrity(const VerifyIntegrityDto& veri
             session_status_ = SessionStatus::kCancelledByReceiver;
             co_return false;
         } else {
-            throw std::runtime_error(std::format("{}:{}", res.reason(), res.body()));
+            throw std::runtime_error(
+                std::format("{}:{}", std::string_view(res.reason()), res.body()));
         }
     } catch (const std::exception& e) {
         if (session_status_ != SessionStatus::kCancelledBySender
