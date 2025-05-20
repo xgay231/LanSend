@@ -1,0 +1,14 @@
+#pragma once
+
+#include <core/util/binary_message.h>
+#include <filesystem>
+
+namespace lansend {
+
+class FileHasher {
+public:
+    static std::string CalculateFileChecksum(const std::filesystem::path& file_path);
+    static std::string CalculateDataChecksum(const BinaryData& data);
+};
+
+} // namespace lansend

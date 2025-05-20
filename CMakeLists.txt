@@ -3,12 +3,9 @@ project(lansend LANGUAGES CXX)
 
 option(BUILD_TESTING "Build the tests" ON)
 
-file(GLOB_RECURSE CXX_SOURCE
-    src/*.cpp
-    src/*.h
-    src/*.hpp
-    src/*.cc
-)
+file(GLOB_RECURSE CORE_SOURCE src/core/*.cc)
+file(GLOB_RECURSE CLI_SOURCE src/cli/*.cc)
+file(GLOB_RECURSE BACKEND_SOURCE src/ipc/*.cc)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,14 +25,23 @@ find_package(PkgConfig REQUIRED)
 find_package(GTest REQUIRED)
 pkg_check_modules(tomlplusplus REQUIRED IMPORTED_TARGET tomlplusplus)
 
-add_executable(lansend ${CXX_SOURCE})
+add_executable(lansend-cli ${CORE_SOURCE} ${CLI_SOURCE})
+add_executable(lansend-backend ${CORE_SOURCE} ${BACKEND_SOURCE})
 
 if(WIN32)
-  target_compile_definitions(lansend PRIVATE _WIN32_WINNT=0x0A00)
+  target_compile_definitions(lansend-cli PRIVATE _WIN32_WINNT=0x0A00)
+  target_compile_definitions(lansend-backend PRIVATE _WIN32_WINNT=0x0A00)
 endif()
 
 # definitions for Logger
-target_compile_definitions(lansend
+target_compile_definitions(lansend-cli
+  PRIVATE
+    $<$<CONFIG:Debug>:LANSEND_DEBUG>
+    $<$<CONFIG:Release>:LANSEND_RELEASE>
+    BOOST_ASIO_USE_STD_COROUTINE
+    BOOST_ASIO_HAS_CO_AWAIT
+)
+target_compile_definitions(lansend-backend
   PRIVATE
     $<$<CONFIG:Debug>:LANSEND_DEBUG>
     $<$<CONFIG:Release>:LANSEND_RELEASE>
@@ -43,16 +49,37 @@ target_compile_definitions(lansend
     BOOST_ASIO_HAS_CO_AWAIT
 )
 
-target_include_directories(lansend
+target_include_directories(lansend-cli
     PRIVATE
-      ${CMAKE_SOURCE_DIR}/src
+      ${CMAKE_SOURCE_DIR}/src/include
+)
+target_include_directories(lansend-backend
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/include
 )
 
 if (MSVC)
-  target_compile_options(lansend PRIVATE /bigobj)
+  target_compile_options(lansend-cli PRIVATE /bigobj)
+  target_compile_options(lansend-backend PRIVATE /bigobj)
 endif()
 
-target_link_libraries(lansend
+target_link_libraries(lansend-cli
+    PRIVATE
+        spdlog::spdlog_header_only
+        Boost::boost
+        Boost::system
+        Boost::filesystem
+        Boost::url
+        Boost::asio
+        Boost::beast
+        Boost::uuid
+        Boost::program_options
+        OpenSSL::Crypto
+        OpenSSL::SSL
+        nlohmann_json::nlohmann_json
+)
+
+target_link_libraries(lansend-backend
     PRIVATE
         spdlog::spdlog_header_only
         Boost::boost

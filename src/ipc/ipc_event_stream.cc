@@ -1,11 +1,11 @@
-#include "ipc_event_stream.h"
-#include "models/ipc/confirm_receive_operation.h"
+#include <ipc/ipc_event_stream.h>
+#include <ipc/model.h>
 #include <spdlog/spdlog.h>
 
 namespace lansend {
 
 void IpcEventStream::PostOperation(Operation&& operation) {
-    if (operation.type == OperationType::kConfirmReceive) {
+    if (operation.type == OperationType::kRespondToReceiveRequest) {
         ConfirmReceiveOperation confirm_receive_operation;
         try {
             nlohmann::from_json(operation.data, confirm_receive_operation);
@@ -22,7 +22,7 @@ void IpcEventStream::PostOperation(Operation&& operation) {
 }
 
 void IpcEventStream::PostOperation(const Operation& operation) {
-    if (operation.type == OperationType::kConfirmReceive) {
+    if (operation.type == OperationType::kRespondToReceiveRequest) {
         ConfirmReceiveOperation confirm_receive_operation;
         try {
             nlohmann::from_json(operation.data, confirm_receive_operation);
