@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace lansend {
+namespace lansend::core {
 
 inline bool cancel_receive{false};
 
@@ -87,4 +87,4 @@ private:
     unsigned short sender_port_{};
 };
 
-} // namespace lansend
+} // namespace lansend::core

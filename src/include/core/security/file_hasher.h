@@ -3,7 +3,7 @@
 #include <core/util/binary_message.h>
 #include <filesystem>
 
-namespace lansend {
+namespace lansend::core {
 
 class FileHasher {
 public:
@@ -11,4 +11,4 @@ public:
     static std::string CalculateDataChecksum(const BinaryData& data);
 };
 
-} // namespace lansend
+} // namespace lansend::core

@@ -8,6 +8,8 @@
 #include <windows.h> // 用于 Windows 系统
 #endif
 
+namespace lansend::cli {
+
 #ifdef _WIN32
 // Windows 系统下的实现
 Terminal::Terminal() {
@@ -149,3 +151,5 @@ void Terminal::print_prompt() {
     std::cout << "> ";
     std::cout.flush();
 }
+
+} // namespace lansend::cli

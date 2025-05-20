@@ -8,6 +8,8 @@
 #include <termios.h>
 #endif
 
+namespace lansend::cli {
+
 class Terminal {
 public:
     Terminal();
@@ -35,3 +37,5 @@ private:
     struct termios newt_;
 #endif
 };
+
+} // namespace lansend::cli

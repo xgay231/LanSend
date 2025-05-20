@@ -16,7 +16,7 @@ namespace http = beast::http;
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace lansend {
+namespace lansend::core {
 
 SendSession::SendSession(boost::asio::io_context& ioc, CertificateManager& cert_manager)
     : ioc_(ioc)
@@ -115,7 +115,7 @@ boost::asio::awaitable<void> SendSession::Start(const std::vector<std::filesyste
     }
     try {
         RequestSendDto send_request_dto;
-        send_request_dto.device_info = models::DeviceInfo::LocalDeviceInfo();
+        send_request_dto.device_info = DeviceInfo::LocalDeviceInfo();
         send_request_dto.files = std::move(prepared_files);
 
         bool connected = co_await client_.Connect(host, port);
@@ -454,4 +454,4 @@ net::awaitable<bool> SendSession::verifyIntegrity(const VerifyIntegrityDto& veri
     }
 }
 
-} // namespace lansend
+} // namespace lansend::core

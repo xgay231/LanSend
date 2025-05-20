@@ -20,7 +20,7 @@ namespace http = beast::http;
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace lansend {
+namespace lansend::core {
 
 ReceiveController::ReceiveController(HttpServer& server, const std::filesystem::path& save_dir)
     : server_(server)
@@ -69,7 +69,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onRequestSe
             co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
         }
 
-        models::DeviceInfo device_info = std::move(request_send_dto.device_info);
+        DeviceInfo device_info = std::move(request_send_dto.device_info);
         std::vector<FileDto> files = std::move(request_send_dto.files);
         std::string all_file_names{};
         for (const auto& file : files) {
@@ -534,4 +534,4 @@ void ReceiveController::resetToIdle() {
     completed_count_ = 0;
 }
 
-} // namespace lansend
+} // namespace lansend::core

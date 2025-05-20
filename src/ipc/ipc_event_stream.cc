@@ -1,8 +1,11 @@
+#include "core/model/feedback/feedback.h"
 #include <ipc/ipc_event_stream.h>
 #include <ipc/model.h>
 #include <spdlog/spdlog.h>
 
-namespace lansend {
+namespace lansend::ipc {
+
+using core::Feedback;
 
 void IpcEventStream::PostOperation(Operation&& operation) {
     if (operation.type == OperationType::kRespondToReceiveRequest) {
@@ -38,12 +41,12 @@ void IpcEventStream::PostOperation(const Operation& operation) {
     }
 }
 
-void IpcEventStream::PostNotification(Notification&& notification) {
-    notifications_.emplace_back(std::move(notification));
+void IpcEventStream::PostFeedback(Feedback&& feedback) {
+    feedbacks_.emplace_back(std::move(feedback));
 }
 
-void IpcEventStream::PostNotification(const Notification& notification) {
-    notifications_.emplace_back(notification);
+void IpcEventStream::PostFeedback(const Feedback& feedback) {
+    feedbacks_.emplace_back(feedback);
 }
 
 std::optional<Operation> IpcEventStream::PollActiveOperation() {
@@ -72,13 +75,13 @@ bool IpcEventStream::PollCancelReceiveOperation() {
     return true;
 }
 
-std::optional<Notification> IpcEventStream::PollNotification() {
-    if (notifications_.empty()) {
+std::optional<Feedback> IpcEventStream::PollFeedback() {
+    if (feedbacks_.empty()) {
         return std::nullopt;
     }
-    Notification notification = notifications_.front();
-    notifications_.pop_front();
-    return notification;
+    Feedback feedback = feedbacks_.front();
+    feedbacks_.pop_front();
+    return feedback;
 }
 
-} // namespace lansend
+} // namespace lansend::ipc
