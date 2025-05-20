@@ -56,4 +56,8 @@ std::string FileHasher::CalculateDataChecksum(const BinaryData& data) {
     return ss.str();
 }
 
+FileHasher::FileHasher() {
+    OpenSSLProvider::InitOpenSSL();
+}
+
 } // namespace lansend::core

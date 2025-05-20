@@ -1,15 +1,11 @@
 #pragma once
 
+#include "core/security/open_ssl_provider.h"
 #include <expected>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-#include <openssl/rand.h>
-#include <openssl/rsa.h>
 #include <string>
 #include <vector>
 
-namespace lansend {
+namespace lansend::core {
 
 /**
  * @class FileEncryptor
@@ -124,6 +120,9 @@ public:
 private:
     // 安全清除内存
     static void secureZeroMemory(void* data_ptr, std::size_t len);
+
+    FileEncryptor();
+    static FileEncryptor instance;
 };
 
-} // namespace lansend
+} // namespace lansend::core

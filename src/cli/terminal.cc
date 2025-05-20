@@ -23,7 +23,7 @@ Terminal::~Terminal() {
     SetConsoleMode(hIn, mode);
 }
 
-void Terminal::clear_screen() {
+void Terminal::ClearScreen() {
     COORD coordScreen = {0, 0};
     DWORD cCharsWritten;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -38,14 +38,14 @@ void Terminal::clear_screen() {
     SetConsoleCursorPosition(hOut, coordScreen);
 }
 
-void Terminal::set_cursor_position(int x, int y) {
+void Terminal::SetCursorPosition(int x, int y) {
     COORD coord;
     coord.X = static_cast<SHORT>(x);
     coord.Y = static_cast<SHORT>(y);
     SetConsoleCursorPosition(hOut, coord);
 }
 
-std::string Terminal::read_line() {
+std::string Terminal::ReadLine() {
     std::string line;
     char ch;
     while ((ch = _getch()) != '\r') {
@@ -65,7 +65,7 @@ std::string Terminal::read_line() {
     return line;
 }
 
-bool Terminal::is_key_pressed() {
+bool Terminal::IsKeyPressed() {
     return _kbhit();
 }
 #else
@@ -127,7 +127,7 @@ bool Terminal::IsKeyPressed() {
 }
 #endif
 
-void Terminal::print_info(const std::string& message) {
+void Terminal::PrintInfo(const std::string& message) {
 #ifdef _WIN32
     SetConsoleTextAttribute(hOut, FOREGROUND_GREEN);
     std::cout << "[INFO] " << message << std::endl;
@@ -137,7 +137,7 @@ void Terminal::print_info(const std::string& message) {
 #endif
 }
 
-void Terminal::print_error(const std::string& message) {
+void Terminal::PrintError(const std::string& message) {
 #ifdef _WIN32
     SetConsoleTextAttribute(hOut, FOREGROUND_RED);
     std::cerr << "[ERROR] " << message << std::endl;
@@ -147,7 +147,7 @@ void Terminal::print_error(const std::string& message) {
 #endif
 }
 
-void Terminal::print_prompt() {
+void Terminal::PrintPrompt() {
     std::cout << "> ";
     std::cout.flush();
 }

@@ -233,7 +233,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onSendChunk
                 }
 
                 // All valid, process the chunk
-                auto actual_checksum = file_hasher_.CalculateDataChecksum(chunk_data);
+                auto actual_checksum = FileHasher::CalculateDataChecksum(chunk_data);
                 if (actual_checksum != send_chunk_dto.chunk_checksum) {
                     throw std::runtime_error(
                         std::format("Chunk checksum mismatch for file_id {} in session_id {}",
@@ -342,7 +342,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyInt
                                     file_context.total_chunks));
                 }
                 // Verify the file checksum
-                auto actual_checksum = file_hasher_.CalculateFileChecksum(
+                auto actual_checksum = FileHasher::CalculateFileChecksum(
                     file_context.temp_file_path);
                 if (actual_checksum != file_context.file_checksum) {
                     spdlog::debug("File checksum: {}, actual checksum: {}",

@@ -73,7 +73,7 @@ std::vector<FileDto> SendSession::prepareFiles(const std::vector<std::filesystem
             file_dto.chunk_size = transfer::kDefaultChunkSize;
             file_dto.total_chunks = (file_dto.file_size + file_dto.chunk_size - 1)
                                     / file_dto.chunk_size;
-            file_dto.file_checksum = file_hasher_.CalculateFileChecksum(file_path);
+            file_dto.file_checksum = FileHasher::CalculateFileChecksum(file_path);
             file_dto.file_type = GetFileType(file_path.string());
             spdlog::debug(
                 "FileDto: file_id={}, file_name={}, file_size={}, chunk_size={}, total_chunks={}, "
@@ -313,7 +313,7 @@ boost::asio::awaitable<void> SendSession::sendFile(std::string_view file_id) {
                 file_id.data(),
                 file_info.file_token,
                 chunk_idx,
-                file_hasher_.CalculateDataChecksum(chunk_data),
+                FileHasher::CalculateDataChecksum(chunk_data),
             };
 
             bool chunk_sent = co_await sendChunk(send_chunk_dto, chunk_data);

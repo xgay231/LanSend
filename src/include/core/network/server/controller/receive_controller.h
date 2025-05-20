@@ -76,7 +76,6 @@ private:
 
     HttpServer& server_;
     std::filesystem::path save_dir_;
-    FileHasher file_hasher_;
 
     ReceiveSessionStatus session_status_{ReceiveSessionStatus::kIdle};
     std::string session_id_{};

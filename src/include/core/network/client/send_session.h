@@ -51,8 +51,6 @@ private:
     CertificateManager& cert_manager_;
     HttpsClient client_;
 
-    FileHasher file_hasher_;
-
     std::unordered_map<std::string, TransferFileInfo> transfer_files_;
     SessionStatus session_status_ = SessionStatus::kIdle;
 
