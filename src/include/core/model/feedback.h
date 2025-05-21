@@ -17,14 +17,13 @@
 #include <nlohmann/json.hpp>
 
 namespace lansend::core {
-
-using FeedbackCallback = std::function<void(FeedbackType type, const nlohmann::json& data)>;
-
 struct Feedback {
     FeedbackType type;
     nlohmann::json data;
 
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(Feedback, type, data);
 };
+
+using FeedbackCallback = std::function<void(Feedback&&)>;
 
 } // namespace lansend::core

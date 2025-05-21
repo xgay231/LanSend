@@ -1,11 +1,12 @@
-#include "core/model/feedback/feedback.h"
+#include <core/model/feedback.h>
 #include <ipc/ipc_event_stream.h>
 #include <ipc/model.h>
 #include <spdlog/spdlog.h>
 
 namespace lansend::ipc {
 
-using core::Feedback;
+using namespace ipc::operation;
+using Feedback = core::Feedback;
 
 void IpcEventStream::PostOperation(Operation&& operation) {
     if (operation.type == OperationType::kRespondToReceiveRequest) {

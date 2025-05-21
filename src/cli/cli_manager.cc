@@ -159,8 +159,7 @@ void CliManager::print_device_list(const std::vector<DeviceInfo>& devices) {
     terminal_->PrintInfo("device list:");
     for (const auto& device : devices) {
         std::ostringstream oss;
-        oss << "ID: " << device.device_id << " | alias: " << device.alias
-            << " | IP: " << device.ip_address;
+        oss << "ID: " << device.device_id << " | IP: " << device.ip_address;
         terminal_->PrintInfo(oss.str());
     }
 }

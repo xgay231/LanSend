@@ -1,5 +1,5 @@
 
-#include "file_encryptor.h"
+#include <core/security/file_encryptor.h>
 #include <string>
 #include <fstream>
 #include <spdlog/spdlog.h>
