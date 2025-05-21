@@ -8,6 +8,7 @@ namespace lansend::ipc {
 using Feedback = core::Feedback;
 
 void IpcEventStream::PostOperation(Operation&& operation) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (operation.type == OperationType::kRespondToReceiveRequest) {
         operation::ConfirmReceive confirm_receive;
         try {
@@ -25,6 +26,7 @@ void IpcEventStream::PostOperation(Operation&& operation) {
 }
 
 void IpcEventStream::PostOperation(const Operation& operation) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (operation.type == OperationType::kRespondToReceiveRequest) {
         operation::ConfirmReceive confirm_receive_operation;
         try {
@@ -50,6 +52,7 @@ void IpcEventStream::PostFeedback(const Feedback& feedback) {
 }
 
 std::optional<Operation> IpcEventStream::PollActiveOperation() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (active_operations_.empty()) {
         return std::nullopt;
     }
@@ -68,6 +71,7 @@ std::optional<operation::ConfirmReceive> IpcEventStream::PollConfirmReceiveOpera
 }
 
 bool IpcEventStream::PollCancelReceiveOperation() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!cancel_receive_operation_) {
         return false;
     }
@@ -76,6 +80,7 @@ bool IpcEventStream::PollCancelReceiveOperation() {
 }
 
 std::optional<Feedback> IpcEventStream::PollFeedback() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (feedbacks_.empty()) {
         return std::nullopt;
     }

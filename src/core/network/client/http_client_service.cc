@@ -5,6 +5,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <core/network/client/http_client_service.h>
+#include <iostream>
 #include <nlohmann/json.hpp>
 
 namespace net = boost::asio;

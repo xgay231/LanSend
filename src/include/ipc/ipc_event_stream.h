@@ -3,6 +3,7 @@
 #include <core/model/feedback.h>
 #include <deque>
 #include <ipc/model.h>
+#include <mutex>
 #include <nlohmann/json.hpp>
 
 namespace lansend::ipc {
@@ -21,7 +22,13 @@ public:
     bool PollCancelReceiveOperation();
     std::optional<Feedback> PollFeedback();
 
+    static IpcEventStream* Instance() {
+        static IpcEventStream instance;
+        return &instance;
+    }
+
 private:
+    mutable std::mutex mutex_;
     // "common" and "send" operations that will be polling actively
     std::deque<Operation> active_operations_;
 
