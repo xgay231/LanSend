@@ -1,11 +1,17 @@
 #pragma once
 
-#include "core/security/open_ssl_provider.h"
+
 #include <expected>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#include <openssl/rsa.h>
 #include <string>
 #include <vector>
 
-namespace lansend::core {
+namespace lansend {
+
 
 /**
  * @class FileEncryptor
@@ -96,7 +102,7 @@ public:
      * @param iv 初始化向量
      * @return 认证标签
      */
-    static std::expected<std::vector<std::uint8_t>, ErrorType> EncryptFile(
+    static std::expected<std::vector<std::uint8_t>, ErrorType> EncryptFileA(
         const std::string& input_file,
         const std::string& output_file,
         const std::vector<std::uint8_t>& key,
@@ -111,7 +117,7 @@ public:
      * @param tag 认证标签
      * @return 解密是否成功
      */
-    static bool DecryptFile(const std::string& input_file,
+    static bool DecryptFileA(const std::string& input_file,
                             const std::string& output_file,
                             const std::vector<std::uint8_t>& key,
                             const std::vector<std::uint8_t>& iv,
@@ -121,8 +127,7 @@ private:
     // 安全清除内存
     static void secureZeroMemory(void* data_ptr, std::size_t len);
 
-    FileEncryptor();
-    static FileEncryptor instance;
 };
 
-} // namespace lansend::core
+} // namespace lansend
+
