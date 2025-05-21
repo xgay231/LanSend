@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include <cstdint>
 #include <expected>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -11,7 +11,6 @@
 #include <vector>
 
 namespace lansend {
-
 
 /**
  * @class FileEncryptor
@@ -118,16 +117,14 @@ public:
      * @return 解密是否成功
      */
     static bool DecryptFileA(const std::string& input_file,
-                            const std::string& output_file,
-                            const std::vector<std::uint8_t>& key,
-                            const std::vector<std::uint8_t>& iv,
-                            const std::vector<std::uint8_t>& tag);
+                             const std::string& output_file,
+                             const std::vector<std::uint8_t>& key,
+                             const std::vector<std::uint8_t>& iv,
+                             const std::vector<std::uint8_t>& tag);
 
 private:
     // 安全清除内存
     static void secureZeroMemory(void* data_ptr, std::size_t len);
-
 };
 
 } // namespace lansend
-

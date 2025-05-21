@@ -35,5 +35,4 @@ private:
     FeedbackCallback callback_;
 };
 
-
 } // namespace lansend::core
