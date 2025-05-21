@@ -21,11 +21,6 @@ void CliManager::process_command(const std::string& command) {
     auto args = parse_command(command);
     execute_command(args);
 }
-void CliManager::process_command(const std::string& command) {
-    auto args = parse_command(command);
-    execute_command(args);
-}
-
 void CliManager::start_interactive_mode() {
     terminal_->ClearScreen();
     while (true) {

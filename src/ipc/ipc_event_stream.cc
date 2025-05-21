@@ -5,15 +5,14 @@
 
 namespace lansend::ipc {
 
-using namespace ipc::operation;
 using Feedback = core::Feedback;
 
 void IpcEventStream::PostOperation(Operation&& operation) {
     if (operation.type == OperationType::kRespondToReceiveRequest) {
-        ConfirmReceive confirm_receive_operation;
+        operation::ConfirmReceive confirm_receive;
         try {
-            nlohmann::from_json(operation.data, confirm_receive_operation);
-            confirm_receive_operation_ = std::move(confirm_receive_operation);
+            nlohmann::from_json(operation.data, confirm_receive);
+            confirm_receive_operation_ = std::move(confirm_receive);
         } catch (const std::exception& e) {
             spdlog::error("Failed to parse ConfirmReceiveOperation: {}", e.what());
             return;
@@ -27,7 +26,7 @@ void IpcEventStream::PostOperation(Operation&& operation) {
 
 void IpcEventStream::PostOperation(const Operation& operation) {
     if (operation.type == OperationType::kRespondToReceiveRequest) {
-        ConfirmReceive confirm_receive_operation;
+        operation::ConfirmReceive confirm_receive_operation;
         try {
             nlohmann::from_json(operation.data, confirm_receive_operation);
             confirm_receive_operation_ = std::move(confirm_receive_operation);
@@ -59,11 +58,11 @@ std::optional<Operation> IpcEventStream::PollActiveOperation() {
     return op;
 }
 
-std::optional<ConfirmReceive> IpcEventStream::PollConfirmReceiveOperation() {
+std::optional<operation::ConfirmReceive> IpcEventStream::PollConfirmReceiveOperation() {
     if (!confirm_receive_operation_) {
         return std::nullopt;
     }
-    ConfirmReceive operation = *confirm_receive_operation_;
+    operation::ConfirmReceive operation = *confirm_receive_operation_;
     confirm_receive_operation_ = std::nullopt;
     return operation;
 }
