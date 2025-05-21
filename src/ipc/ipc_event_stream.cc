@@ -9,7 +9,7 @@ using core::Feedback;
 
 void IpcEventStream::PostOperation(Operation&& operation) {
     if (operation.type == OperationType::kRespondToReceiveRequest) {
-        ConfirmReceiveOperation confirm_receive_operation;
+        ConfirmReceive confirm_receive_operation;
         try {
             nlohmann::from_json(operation.data, confirm_receive_operation);
             confirm_receive_operation_ = std::move(confirm_receive_operation);
@@ -26,7 +26,7 @@ void IpcEventStream::PostOperation(Operation&& operation) {
 
 void IpcEventStream::PostOperation(const Operation& operation) {
     if (operation.type == OperationType::kRespondToReceiveRequest) {
-        ConfirmReceiveOperation confirm_receive_operation;
+        ConfirmReceive confirm_receive_operation;
         try {
             nlohmann::from_json(operation.data, confirm_receive_operation);
             confirm_receive_operation_ = std::move(confirm_receive_operation);
@@ -58,11 +58,11 @@ std::optional<Operation> IpcEventStream::PollActiveOperation() {
     return op;
 }
 
-std::optional<ConfirmReceiveOperation> IpcEventStream::PollConfirmReceiveOperation() {
+std::optional<ConfirmReceive> IpcEventStream::PollConfirmReceiveOperation() {
     if (!confirm_receive_operation_) {
         return std::nullopt;
     }
-    ConfirmReceiveOperation operation = *confirm_receive_operation_;
+    ConfirmReceive operation = *confirm_receive_operation_;
     confirm_receive_operation_ = std::nullopt;
     return operation;
 }
