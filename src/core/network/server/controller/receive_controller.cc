@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/http/vector_body.hpp>
 #include <boost/uuid/random_generator.hpp>
@@ -9,6 +10,7 @@
 #include <core/util/binary_message.h>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <ranges>
 #include <regex>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -22,9 +24,12 @@ using json = nlohmann::json;
 
 namespace lansend::core {
 
-ReceiveController::ReceiveController(HttpServer& server, const std::filesystem::path& save_dir)
+ReceiveController::ReceiveController(HttpServer& server,
+                                     const std::filesystem::path& save_dir,
+                                     FeedbackCallback callback)
     : server_(server)
-    , save_dir_(save_dir) {
+    , save_dir_(save_dir)
+    , callback_(callback) {
     if (!std::filesystem::exists(save_dir_)) {
         std::filesystem::create_directories(save_dir_);
     }
@@ -53,6 +58,28 @@ unsigned short ReceiveController::sender_port() const {
 void ReceiveController::NotifySenderLost() {
     spdlog::info("Being notified that sender is lost before the session is completed");
     resetToIdle();
+
+    // feedback session failed
+    feedback(Feedback{
+        .type = FeedbackType::kReceiveSessionEnded,
+        .data = feedback::ReceiveSessionEnd{
+            .session_id = session_id_,
+            .success = false,
+            .error_message = "Sender is lost",
+        },
+    });
+}
+
+void ReceiveController::SetFeedbackCallback(FeedbackCallback callback) {
+    callback_ = callback;
+}
+
+void ReceiveController::SetWaitConditionFunc(WaitConditionFunc func) {
+    wait_condition_ = func;
+}
+
+void ReceiveController::SetCancelConditionFunc(CancelConditionFunc func) {
+    cancel_condition_ = func;
 }
 
 net::awaitable<http::response<http::string_body>> ReceiveController::onRequestSend(
@@ -90,8 +117,26 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onRequestSe
             co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "receiver busy");
         } else {
             spdlog::info("The receiver is idle, start handling the request");
-            session_status_ = ReceiveSessionStatus::kReceiving;
+            session_status_ = ReceiveSessionStatus::kWorking;
         }
+
+        std::vector<std::string> file_names;
+        for (const auto& file : files) {
+            file_names.push_back(file.file_name);
+        }
+
+        // feedback session started
+        feedback(Feedback{
+            .type = FeedbackType::kRequestReceiveFiles,
+            .data = feedback::RequestReceiveFiles{
+                .device_info = device_info,
+                .file_names = file_names,
+            },
+        });
+
+        // Record sender's network information
+        sender_ip_ = device_info.ip_address;
+        sender_port_ = device_info.port;
 
         spdlog::debug("Wait for user confirmation");
 
@@ -101,7 +146,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onRequestSe
 
         // Sender might cancel waiting for user confirmation
         // resetToIdle() was called cocurrently when handling sender's request
-        if (session_status_ != ReceiveSessionStatus::kReceiving) {
+        if (session_status_ != ReceiveSessionStatus::kWorking) {
             spdlog::info("Sender cancelled waiting for user confirmation");
             co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "sender cancelled");
         }
@@ -113,10 +158,6 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onRequestSe
             resetToIdle();
             co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "declined");
         }
-
-        // Record sender's network information
-        sender_ip_ = device_info.ip_address;
-        sender_port_ = device_info.port;
 
         // Generate a unique session ID with timestamp
         boost::uuids::random_generator uuid_gen;
@@ -180,15 +221,14 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onSendChunk
     // Sender might still send several data when receiver received the cancellation request
     // and resetToIdle() was called cocurrently
     // Notify sender to stop the sending coroutine
-    if (session_status_ != ReceiveSessionStatus::kReceiving) {
+    if (session_status_ != ReceiveSessionStatus::kWorking) {
         spdlog::info("Chunk data sent when receive session is already cancelled by sender");
         co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "sender cancelled");
     }
 
     // This should be polling the event stream to check the ui operation
-    if (cancel_receive) {
+    if (cancel_condition_()) {
         spdlog::info("receiver cancelled the session");
-        cancel_receive = false;
         resetToIdle();
         co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "receiver cancelled");
     }
@@ -269,6 +309,18 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onSendChunk
 
                 // Update the received chunks count
                 file_context.received_chunks.insert(send_chunk_dto.current_chunk_index);
+
+                // feedback file receiving progress
+                feedback(Feedback{
+                    .type = FeedbackType::kFileReceivingProgress,
+                    .data = feedback::FileReceivingProgress{
+                        .session_id = session_id_,
+                        .filename = file_context.file_name,
+                        .progress = 
+                            static_cast<double>(file_context.received_chunks.size())
+                            / file_context.total_chunks * 100.0,
+                    },
+                });
                 co_return HttpServer::Ok(req.version(), req.keep_alive(), "ok");
             } else {
                 throw std::runtime_error(
@@ -285,6 +337,16 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onSendChunk
     } catch (const std::exception& e) {
         spdlog::error("Error processing chunk: {}", e.what());
         resetToIdle();
+
+        // feedback session failed
+        feedback(Feedback{
+            .type = FeedbackType::kReceiveSessionEnded,
+            .data = feedback::ReceiveSessionEnd{
+                .session_id = session_id_,
+                .success = false,
+                .error_message = e.what(),
+            },
+        });
         co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
     }
 }
@@ -293,15 +355,14 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyInt
     const http::request<http::string_body>& req) {
     spdlog::debug("ReceiveController::OnVerifyIntegrity");
 
-    if (session_status_ != ReceiveSessionStatus::kReceiving) {
+    if (session_status_ != ReceiveSessionStatus::kWorking) {
         spdlog::info("Chunk data sent when receive session is already cancelled by sender");
         co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "sender cancelled");
     }
 
     // This should be polling the event stream to check the ui operation
-    if (cancel_receive) {
+    if (cancel_condition_()) {
         spdlog::info("receiver cancelled the session");
-        cancel_receive = false;
         resetToIdle();
         co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "receiver cancelled");
     }
@@ -386,7 +447,16 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyInt
                              file_context.file_name,
                              final_file_path.string());
 
-                completed_count_++;
+                completed_file_count_++;
+
+                // feedback file receiving completed
+                feedback(Feedback{
+                    .type = FeedbackType::kFileReceivingCompleted,
+                    .data = feedback::FileReceivingCompleted{
+                        .session_id = session_id_,
+                        .filename = file_context.file_name,
+                    },
+                });
 
                 // Check if all files in the session are completed
                 checkSessionCompletion();
@@ -406,7 +476,17 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyInt
 
     } catch (const std::exception& e) {
         spdlog::error("Error processing file integrity verification: {}", e.what());
-        session_status_ = ReceiveSessionStatus::kIdle;
+        resetToIdle();
+
+        // feedback session failed
+        feedback(Feedback{
+            .type = FeedbackType::kReceiveSessionEnded,
+            .data = feedback::ReceiveSessionEnd{
+                .session_id = session_id_,
+                .success = false,
+                .error_message = e.what(),
+            },
+        });
         co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
     }
 }
@@ -414,7 +494,7 @@ net::awaitable<http::response<http::string_body>> ReceiveController::onVerifyInt
 net::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
 ReceiveController::onCancelSend(const http::request<boost::beast::http::string_body>& req) {
     spdlog::debug("ReceiveController::OnCancelSend");
-    if (session_status_ != ReceiveSessionStatus::kReceiving) {
+    if (session_status_ != ReceiveSessionStatus::kWorking) {
         spdlog::info(
             "cancel send request sent when receive session is already cancelled by sender");
         co_return HttpServer::Ok(req.version(), req.keep_alive(), "Not receiving");
@@ -437,6 +517,16 @@ ReceiveController::onCancelSend(const http::request<boost::beast::http::string_b
 
             spdlog::info("Session {} is cancelled by the sender", session_id);
 
+            // feedback session cancelled
+            feedback(Feedback{
+                .type = FeedbackType::kReceiveSessionEnded,
+                .data = feedback::ReceiveSessionEnd{
+                    .session_id = session_id_,
+                    .success = false,
+                    .cancelled_by_sender = true,
+                },
+            });
+
             co_return HttpServer::Ok(req.version(), req.keep_alive());
         } else {
             throw std::runtime_error("Invalid session ID: " + session_id);
@@ -447,30 +537,86 @@ ReceiveController::onCancelSend(const http::request<boost::beast::http::string_b
     }
 }
 
+net::awaitable<boost::beast::http::response<boost::beast::http::string_body>>
+ReceiveController::onCancelWait(const http::request<boost::beast::http::string_body>& req) {
+    spdlog::debug("ReceiveController::OnCancelWait");
+    if (session_status_ != ReceiveSessionStatus::kWorking) {
+        spdlog::info(
+            "cancel wait request sent when receive session is already cancelled by sender");
+        co_return HttpServer::Ok(req.version(), req.keep_alive(), "Not waiting");
+    }
+
+    try {
+        std::string ip;
+        unsigned short port;
+        try {
+            json data = json::parse(req.body());
+            ip = data["ip"].get<std::string>();
+            port = data["port"].get<unsigned short>();
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing request: {}", e.what());
+            co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
+        }
+
+        if (ip == sender_ip_ && port == sender_port_) {
+            resetToIdle();
+            spdlog::info("Wait for user confirmation is cancelled by the sender");
+
+            // feedback session cancelled
+            feedback(Feedback{
+                .type = FeedbackType::kReceiveSessionEnded,
+                .data = feedback::ReceiveSessionEnd{
+                    .session_id = session_id_,
+                    .success = false,
+                    .cancelled_by_sender = true,
+                },
+            });
+            co_return HttpServer::Ok(req.version(), req.keep_alive());
+        } else {
+            co_return HttpServer::Forbidden(req.version(),
+                                            req.keep_alive(),
+                                            "invalid sender ip or port");
+        }
+
+        co_return HttpServer::Ok(req.version(), req.keep_alive());
+    } catch (const std::exception& e) {
+        spdlog::error("Error processing cancel wait request: {}", e.what());
+        co_return HttpServer::InternalServerError(req.version(), req.keep_alive(), e.what());
+    }
+}
+
 boost::asio::awaitable<std::optional<std::vector<FileDto>>> ReceiveController::waitForUserConfirmation(
     std::string device_id, const std::vector<FileDto>& files, int timeout_seconds) {
-    // TODO: Implement the logic to wait for user confirmation
-    // This is a placeholder implementation that always accepts all files
+    if (wait_condition_ == nullptr) {
+        spdlog::warn("No wait condition function set, automatically accepting all files");
+        co_return files;
+    }
 
+    auto executor = co_await net::this_coro::executor;
     std::optional<std::vector<FileDto>> result = std::nullopt;
 
-    bool confirmed = true;
     bool timeout = false;
     auto confirmation_task = [&]() -> net::awaitable<void> {
-        // Simulate waiting for user confirmation
-        int total_milliseconds = 0;
-        while (session_status_ == ReceiveSessionStatus::kReceiving) {
-            if (confirmed) {
-                result = files;
+        auto start_time = std::chrono::steady_clock::now();
+        while (session_status_ == ReceiveSessionStatus::kWorking) {
+            if (auto filenames = wait_condition_(); filenames) {
+                std::vector<FileDto> accepted_files;
+                for (auto file : files) {
+                    if (auto iter = std::ranges::find(filenames.value(), file.file_name);
+                        iter != filenames->end()) {
+                        accepted_files.emplace_back(file);
+                    }
+                }
                 co_return;
-            }
-            auto timer = net::steady_timer(co_await net::this_coro::executor,
-                                           std::chrono::milliseconds(50));
-            co_await timer.async_wait(net::use_awaitable);
-            total_milliseconds += 50;
-            if (total_milliseconds >= timeout_seconds * 1000) {
-                timeout = true;
-                co_return;
+            } else {
+                auto duration = std::chrono::steady_clock::now() - start_time;
+                if (std::chrono::duration_cast<std::chrono::seconds>(duration).count()
+                    >= timeout_seconds) {
+                    timeout = true;
+                    spdlog::info("Timeout waiting for user confirmation, automatically declining");
+                    co_return;
+                }
+                co_await net::post(executor);
             }
         }
     };
@@ -517,9 +663,18 @@ void ReceiveController::doCleanup() {
 
 void ReceiveController::checkSessionCompletion() {
     if (!session_id_.empty()) {
-        if (!received_files_.empty() && completed_count_ == received_files_.size()) {
+        if (!received_files_.empty() && completed_file_count_ == received_files_.size()) {
             spdlog::info("All files in session {} have been received successfully.", session_id_);
             resetToIdle();
+
+            // feedback session completeds
+            feedback(Feedback{
+                .type = FeedbackType::kReceiveSessionEnded,
+                .data = feedback::ReceiveSessionEnd{
+                    .session_id = session_id_,
+                    .success = true,
+                },
+            });
         } else {
             spdlog::info("Session {} is still in progress.", session_id_);
         }
@@ -531,7 +686,9 @@ void ReceiveController::resetToIdle() {
     session_id_.clear();
     session_status_ = ReceiveSessionStatus::kIdle;
     received_files_.clear();
-    completed_count_ = 0;
+    completed_file_count_ = 0;
+    sender_ip_.clear();
+    sender_port_ = 0;
 }
 
 } // namespace lansend::core

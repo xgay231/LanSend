@@ -1,9 +1,11 @@
 #pragma once
 
+#include "core/security/certificate_manager.h"
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http.hpp>
+#include <core/model/feedback.h>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -41,8 +43,11 @@ struct RouteInfo {
 //HTTPS 服务器类
 class HttpServer {
 public:
+    using ReceiveWaitConditionFunc = std::function<std::optional<std::vector<std::string>>()>;
+    using ReceiveCancelConditionFunc = std::function<bool()>;
+
     // 构造函数
-    HttpServer(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context);
+    HttpServer(boost::asio::io_context& io_context, CertificateManager& cert_manager);
 
     // 析构函数
     ~HttpServer();
@@ -56,10 +61,14 @@ public:
                   StringRequestHandler&& handler);
 
     // 启动服务器
-    void start(uint16_t port);
+    void Start(uint16_t port);
 
     // 停止服务器
-    void stop();
+    void Stop();
+
+    void SetFeedbackCallback(FeedbackCallback callback);
+    void SetReceiveWaitConditionFunc(ReceiveWaitConditionFunc func);
+    void SetReceiveCancelConditionFunc(ReceiveCancelConditionFunc func);
 
     static HttpResponse Ok(unsigned int version, bool keep_alive, std::string_view body = {});
     static HttpResponse NotFound(unsigned int version,
@@ -79,6 +88,9 @@ public:
                                          bool keep_alive,
                                          std::string_view error_message = "Method Not Allowed");
 
+    // 获取接收控制器
+    ReceiveController& GetReceiveController() { return *receive_controller_; }
+
 private:
     // 接受连接
     boost::asio::awaitable<void> acceptConnections();
@@ -93,7 +105,8 @@ private:
     static StringRequest binaryToStringRequest(const BinaryRequest& req);
 
     boost::asio::io_context& io_context_;
-    boost::asio::ssl::context& ssl_context_;
+    CertificateManager& cert_manager_;
+    boost::asio::ssl::context ssl_context_;
     boost::asio::ip::tcp::acceptor acceptor_;
     bool running_;
     std::map<std::string, RouteInfo> routes_;

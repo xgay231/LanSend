@@ -1,4 +1,5 @@
 #include "core/model/device_info.h"
+#include "core/model/feedback.h"
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <core/constant/route.h>
 #include <core/model.h>
@@ -14,8 +15,13 @@ using json = nlohmann::json;
 
 namespace lansend::core {
 
-CommonController::CommonController(HttpServer& server) {
+CommonController::CommonController(HttpServer& server, FeedbackCallback callback)
+    : callback_(callback) {
     InstallRoutes(server);
+}
+
+void CommonController::SetFeedbackCallback(FeedbackCallback callback) {
+    callback = callback;
 }
 
 net::awaitable<http::response<http::string_body>> CommonController::onPing(
@@ -39,15 +45,7 @@ net::awaitable<http::response<http::string_body>> CommonController::onConnect(
         co_return HttpServer::BadRequest(req.version(), req.keep_alive(), "invalid data");
     }
     // Check if the auth code matches
-    if (settings.pin_code.empty()) {
-        spdlog::info("Pin code is empty, reject connection from {} ({}:{})",
-                     device_info.hostname,
-                     device_info.ip_address,
-                     device_info.port);
-        http::response<http::string_body> res{http::status::forbidden, req.version()};
-        co_return HttpServer::Forbidden(req.version(), req.keep_alive(), "Auth code is empty");
-    }
-    if (settings.pin_code != pin_code) {
+    if (!settings.pin_code.empty() && settings.pin_code != pin_code) {
         spdlog::info("Pin code mismatch, reject connection from {} ({}:{})",
                      device_info.hostname,
                      device_info.ip_address,
